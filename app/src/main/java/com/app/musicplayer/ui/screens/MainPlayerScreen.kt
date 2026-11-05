@@ -3,6 +3,7 @@ package com.app.musicplayer.ui.screens
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -231,21 +232,29 @@ private suspend fun withFrameNanosCompat(): Long = androidx.compose.runtime.with
 @Composable
 private fun WaveSpectrum(active: Boolean, color: Color, modifier: Modifier) {
     val transition = rememberInfiniteTransition(label = "wave")
-    val phase by transition.animateFloat(
-        0f, (2 * Math.PI).toFloat(),
-        infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "phase",
+    val phase: Float by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2400, easing = LinearEasing)
+        ),
+        label = "phase",
     )
-    val amp by animateFloatAsState(if (active) 1f else 0.08f, tween(500), label = "amp")
+    val amp: Float by animateFloatAsState(
+        targetValue = if (active) 1f else 0.08f,
+        animationSpec = tween(500),
+        label = "amp",
+    )
     Canvas(modifier) {
         val bars = 36
         val gap = 4.dp.toPx()
         val w = (size.width - gap * (bars - 1)) / bars
         for (i in 0 until bars) {
-            val a = 0.5f + 0.5f * sin(phase * 2f + i * 0.5f)
-            val b = 0.5f + 0.5f * sin(phase * 3f - i * 0.9f)
-            val h = (0.12f + 0.88f * a * b) * amp * size.height
+            val a: Float = 0.5f + 0.5f * sin(phase * 2f + i * 0.5f)
+            val b: Float = 0.5f + 0.5f * sin(phase * 3f - i * 0.9f)
+            val h: Float = (0.12f + 0.88f * a * b) * amp * size.height
             drawRoundRect(
-                color.copy(alpha = 0.35f + 0.65f * a),
+                color = color.copy(alpha = 0.35f + 0.65f * a),
                 topLeft = Offset(i * (w + gap), (size.height - h) / 2f),
                 size = Size(w, h),
                 cornerRadius = CornerRadius(w / 2f),
