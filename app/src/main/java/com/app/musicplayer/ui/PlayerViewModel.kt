@@ -19,6 +19,8 @@ import com.app.musicplayer.data.ArtLoader
 import com.app.musicplayer.data.MediaStoreRepository
 import com.app.musicplayer.data.PlaylistStore
 import com.app.musicplayer.data.Song
+import com.app.musicplayer.data.Video
+import com.app.musicplayer.data.VideoRepository
 import com.app.musicplayer.data.toMediaItem
 import com.app.musicplayer.service.MusicService
 import com.app.musicplayer.ui.theme.DefaultAccent
@@ -50,6 +52,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
+    private val _videos = MutableStateFlow<List<Video>>(emptyList())
+    val videos: StateFlow<List<Video>> = _videos.asStateFlow()
     private val _ui = MutableStateFlow(PlayerUi())
     val ui: StateFlow<PlayerUi> = _ui.asStateFlow()
     private val _art = MutableStateFlow<Bitmap?>(null)
@@ -167,6 +171,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun songById(id: Long): Song? = songById[id]
+
+    fun loadVideos() {
+        viewModelScope.launch { _videos.value = VideoRepository.loadVideos(ctx) }
+    }
 
     // ------------------------------------------------------------- playback
 

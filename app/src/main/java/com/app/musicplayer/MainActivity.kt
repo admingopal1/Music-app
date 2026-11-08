@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -48,6 +49,7 @@ import com.app.musicplayer.ui.screens.EqualizerScreen
 import com.app.musicplayer.ui.screens.LibraryScreen
 import com.app.musicplayer.ui.screens.MainPlayerScreen
 import com.app.musicplayer.ui.screens.PlaylistsScreen
+import com.app.musicplayer.ui.screens.VideosScreen
 import com.app.musicplayer.ui.theme.MusicTheme
 
 class MainActivity : ComponentActivity() {
@@ -70,6 +72,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     val permissions = rememberPermissions()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         vm.loadLibrary()
+        vm.loadVideos()
     }
     LaunchedEffect(Unit) { launcher.launch(permissions) }
 
@@ -78,6 +81,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
         Tab("Now Playing", Icons.Rounded.PlayCircle),
         Tab("EQ & DSP", Icons.Rounded.GraphicEq),
         Tab("Playlists", Icons.AutoMirrored.Rounded.QueueMusic),
+        Tab("Videos", Icons.Rounded.VideoLibrary),
     )
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
@@ -91,7 +95,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                             selected = tab == i,
                             onClick = { tab = i },
                             icon = { Icon(t.icon, t.label) },
-                            label = { Text(t.label) },
+                            label = { Text(t.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                             colors = NavigationBarItemDefaults.colors(
                                 indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
@@ -114,7 +118,8 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                         0 -> LibraryScreen(vm, onOpenPlayer = { tab = 1 })
                         1 -> MainPlayerScreen(vm)
                         2 -> EqualizerScreen(vm.fx)
-                        else -> PlaylistsScreen(vm, onOpenPlayer = { tab = 1 })
+                        3 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 1 })
+                        else -> VideosScreen(vm)
                     }
                 }
             }
@@ -125,6 +130,10 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
 @Composable
 private fun rememberPermissions(): Array<String> = androidx.compose.runtime.remember {
     if (Build.VERSION.SDK_INT >= 33)
-        arrayOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+        arrayOf(
+            Manifest.permission.READ_MEDIA_AUDIO,
+            Manifest.permission.READ_MEDIA_VIDEO,
+            Manifest.permission.POST_NOTIFICATIONS,
+        )
     else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
 }
