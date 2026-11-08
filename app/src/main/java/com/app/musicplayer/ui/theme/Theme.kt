@@ -14,8 +14,8 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
-val DefaultAccent = Color(0xFF8E7CFF)
-private val Base = Color(0xFF0B0B12)
+val DefaultAccent = Color(0xFFFF8800) // VLC-style orange
+private val Base = Color(0xFF050505) // near-AMOLED black
 private val TextHigh = Color(0xFFEDEAF6)
 private val TextMid = Color(0xFFB9B4C8)
 
@@ -31,11 +31,11 @@ fun MusicTheme(accent: Color = DefaultAccent, content: @Composable () -> Unit) {
         onPrimaryContainer = Color.White,
         secondary = lerp(a, Color.White, 0.25f),
         onSecondary = Color.Black,
-        background = lerp(Base, a, 0.10f),
+        background = lerp(Base, a, 0.03f),
         onBackground = TextHigh,
-        surface = lerp(Base, a, 0.14f),
+        surface = lerp(Base, a, 0.07f),
         onSurface = TextHigh,
-        surfaceVariant = lerp(Base, a, 0.22f),
+        surfaceVariant = lerp(Base, a, 0.14f),
         onSurfaceVariant = TextMid,
         outline = Color.White.copy(alpha = 0.18f),
     )

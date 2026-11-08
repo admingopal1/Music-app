@@ -2,6 +2,7 @@ package com.app.musicplayer.ui
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
@@ -38,6 +39,7 @@ data class PlayerUi(
     val durationMs: Long = 0,
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
+    val speed: Float = 1f,
 )
 
 class PlayerViewModel(app: Application) : AndroidViewModel(app) {
@@ -55,6 +57,19 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _accent = MutableStateFlow(DefaultAccent)
     val accent: StateFlow<Color> = _accent.asStateFlow()
 
+    // ---- VLC-style extras: A-B repeat, sleep timer, colour mode
+    private val _abA = MutableStateFlow(-1L)
+    val abA: StateFlow<Long> = _abA.asStateFlow()
+    private val _abB = MutableStateFlow(-1L)
+    val abB: StateFlow<Long> = _abB.asStateFlow()
+    private val _sleepLeft = MutableStateFlow(0L)
+    val sleepLeftMs: StateFlow<Long> = _sleepLeft.asStateFlow()
+    private var sleepJob: Job? = null
+
+    private val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val _dynamic = MutableStateFlow(prefs.getBoolean("dynamic_colors", false))
+    val dynamicColors: StateFlow<Boolean> = _dynamic.asStateFlow()
+
     private var controller: MediaController? = null
     private var songById: Map<Long, Song> = emptyMap()
     private var artFor: Long? = null
@@ -68,9 +83,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         connect()
         viewModelScope.launch {
             while (true) {
-                delay(250)
+                val abActive = _abA.value >= 0 && _abB.value > _abA.value
+                delay(if (abActive) 80 else 250)
                 val c = controller
-                if (c != null && c.isPlaying) _ui.update { it.copy(positionMs = c.currentPosition) }
+                if (c != null && c.isPlaying) {
+                    if (abActive && c.currentPosition >= _abB.value) c.seekTo(_abA.value)
+                    _ui.update { it.copy(positionMs = c.currentPosition) }
+                }
             }
         }
     }
@@ -101,9 +120,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             durationMs = dur,
             shuffle = c.shuffleModeEnabled,
             repeatMode = c.repeatMode,
+            speed = c.playbackParameters.speed,
         )
         if (song?.id != artFor) {
             artFor = song?.id
+            _abA.value = -1L
+            _abB.value = -1L
             loadArt(song)
         }
     }
@@ -118,7 +140,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             }
             val bmp = ArtLoader.load(ctx, song)
             _art.value = bmp
-            _accent.value = if (bmp != null) withContext(Dispatchers.Default) { extractAccent(bmp) } else DefaultAccent
+            _accent.value = if (bmp != null && _dynamic.value) withContext(Dispatchers.Default) { extractAccent(bmp) } else DefaultAccent
         }
     }
 
@@ -186,6 +208,45 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 else -> Player.REPEAT_MODE_OFF
             }
         }
+    }
+
+    // ------------------------------------------------------------- VLC-style extras
+
+    fun setSpeed(speed: Float) {
+        controller?.setPlaybackSpeed(speed)
+        refreshUi()
+    }
+
+    /** Tap 1 = set A, tap 2 = set B (loop A-B), tap 3 = clear. */
+    fun cycleAb() {
+        val c = controller ?: return
+        when {
+            _abA.value < 0 -> _abA.value = c.currentPosition
+            _abB.value < 0 -> if (c.currentPosition > _abA.value + 500) _abB.value = c.currentPosition
+            else -> { _abA.value = -1L; _abB.value = -1L }
+        }
+    }
+
+    fun setSleepTimer(minutes: Int) {
+        sleepJob?.cancel()
+        if (minutes <= 0) { _sleepLeft.value = 0L; return }
+        sleepJob = viewModelScope.launch {
+            var left = minutes * 60_000L
+            while (left > 0) {
+                _sleepLeft.value = left
+                delay(1000)
+                left -= 1000
+            }
+            _sleepLeft.value = 0L
+            controller?.pause()
+        }
+    }
+
+    fun setDynamicColors(enabled: Boolean) {
+        prefs.edit().putBoolean("dynamic_colors", enabled).apply()
+        _dynamic.value = enabled
+        artFor = null   // force art/accent to be recomputed
+        refreshUi()
     }
 
     override fun onCleared() {

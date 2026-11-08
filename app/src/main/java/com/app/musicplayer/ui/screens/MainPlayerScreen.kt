@@ -29,11 +29,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -42,6 +44,9 @@ import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -79,6 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import com.app.musicplayer.data.asClock
+import com.app.musicplayer.ui.PlayerUi
 import com.app.musicplayer.ui.PlayerViewModel
 import kotlin.math.sin
 
@@ -172,8 +178,88 @@ fun MainPlayerScreen(vm: PlayerViewModel) {
                     }
                 }
                 Spacer(Modifier.height(12.dp))
+                PlayerTools(vm, ui, accent)
+                Spacer(Modifier.height(12.dp))
             }
         }
+    }
+}
+
+// ------------------------------------------------------------------ VLC-style tools
+
+private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f, 4f)
+private val SLEEP_MINUTES = listOf(15, 30, 45, 60, 90)
+
+private fun speedText(s: Float): String = if (s == s.toInt().toFloat()) "${s.toInt()}x" else "${s}x"
+
+@Composable
+private fun PlayerTools(vm: PlayerViewModel, ui: PlayerUi, accent: Color) {
+    val abA by vm.abA.collectAsStateWithLifecycle()
+    val abB by vm.abB.collectAsStateWithLifecycle()
+    val sleepLeft by vm.sleepLeftMs.collectAsStateWithLifecycle()
+    var speedMenu by remember { mutableStateOf(false) }
+    var sleepMenu by remember { mutableStateOf(false) }
+
+    val abLabel = when {
+        abA < 0 -> "A-B"
+        abB < 0 -> "A " + abA.asClock()
+        else -> abA.asClock() + "-" + abB.asClock()
+    }
+
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box {
+                ToolPill(Icons.Rounded.Speed, speedText(ui.speed), ui.speed != 1f, accent) { speedMenu = true }
+                DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
+                    SPEEDS.forEach { sp ->
+                        DropdownMenuItem(
+                            text = { Text(speedText(sp)) },
+                            onClick = { vm.setSpeed(sp); speedMenu = false },
+                        )
+                    }
+                }
+            }
+            ToolPill(Icons.Rounded.Repeat, abLabel, abA >= 0, accent) { vm.cycleAb() }
+            Box {
+                ToolPill(
+                    Icons.Rounded.Bedtime,
+                    if (sleepLeft > 0) sleepLeft.asClock() else "Sleep",
+                    sleepLeft > 0, accent,
+                ) { sleepMenu = true }
+                DropdownMenu(expanded = sleepMenu, onDismissRequest = { sleepMenu = false }) {
+                    if (sleepLeft > 0) {
+                        DropdownMenuItem(text = { Text("Turn off timer") }, onClick = { vm.setSleepTimer(0); sleepMenu = false })
+                    }
+                    SLEEP_MINUTES.forEach { m ->
+                        DropdownMenuItem(
+                            text = { Text("$m min") },
+                            onClick = { vm.setSleepTimer(m); sleepMenu = false },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ToolPill(icon: ImageVector, label: String, active: Boolean, accent: Color, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(50)
+    Row(
+        Modifier.clip(shape)
+            .background(if (active) accent.copy(0.25f) else Color.White.copy(0.08f))
+            .border(1.dp, if (active) accent else Color.White.copy(0.15f), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = if (active) accent else Color.White.copy(0.8f), modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = if (active) accent else Color.White.copy(0.85f))
     }
 }
 
