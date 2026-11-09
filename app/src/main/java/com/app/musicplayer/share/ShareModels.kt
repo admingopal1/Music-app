@@ -1,0 +1,45 @@
+package com.app.musicplayer.share
+
+import android.net.Uri
+
+enum class Direction { IN, OUT }
+enum class Status { QUEUED, ACTIVE, DONE, FAILED, CANCELLED }
+
+data class TransferItem(
+    val id: Long,
+    val name: String,
+    val size: Long,
+    val direction: Direction,
+    val peer: String = "",
+    val done: Long = 0L,
+    val status: Status = Status.QUEUED,
+    val speedBps: Long = 0L,
+    val uri: Uri? = null,
+    val mime: String = "application/octet-stream",
+    val error: String? = null,
+    val time: Long = System.currentTimeMillis(),
+) {
+    val progress: Float get() = if (size > 0) (done.toFloat() / size).coerceIn(0f, 1f) else 0f
+    val etaSec: Long get() = if (speedBps > 0 && size > done) (size - done) / speedBps else -1L
+}
+
+/** A file the user picked to send / offer for download. */
+data class OutFile(val id: Long, val uri: Uri, val name: String, val size: Long, val mime: String)
+
+data class Peer(val name: String, val host: String, val port: Int)
+
+data class HotspotInfo(val ssid: String, val password: String)
+
+data class ShareUi(
+    val sessionRunning: Boolean = false,
+    val urls: List<String> = emptyList(),
+    val pin: String = "",
+    val deviceName: String = "",
+    val port: Int = 0,
+    val peers: List<Peer> = emptyList(),
+    val outgoing: List<OutFile> = emptyList(),
+    val items: List<TransferItem> = emptyList(),
+    val hotspot: HotspotInfo? = null,
+    val message: String? = null,
+    val libraryChanged: Int = 0,
+)

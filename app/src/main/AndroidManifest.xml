@@ -5,6 +5,8 @@
         android:name="android.hardware.wifi.direct"
         android:required="false" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission
@@ -71,7 +73,7 @@
         </service>
 
         <service
-            android:name=".service.FileTransferService"
+            android:name=".service.ShareService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

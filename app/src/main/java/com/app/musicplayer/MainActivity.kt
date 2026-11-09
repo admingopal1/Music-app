@@ -53,7 +53,7 @@ import com.app.musicplayer.ui.screens.PlayerScreen
 import com.app.musicplayer.ui.screens.MiniPlayer
 import com.app.musicplayer.ui.screens.PlaylistsScreen
 import com.app.musicplayer.ui.screens.VideosScreen
-import com.app.musicplayer.ui.screens.FileTransferScreen
+import com.app.musicplayer.ui.screens.ShareScreen
 import com.app.musicplayer.ui.theme.MusicTheme
 
 class MainActivity : ComponentActivity() {
@@ -129,7 +129,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                         2 -> EqualizerScreen(vm.fx)
                         3 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 1 })
                         4 -> VideosScreen(vm)
-                        else -> FileTransferScreen(vm.fileTransfer)
+                        else -> ShareScreen(vm)
                     }
                 }
             }
