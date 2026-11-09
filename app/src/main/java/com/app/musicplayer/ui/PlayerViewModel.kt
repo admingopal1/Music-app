@@ -32,6 +32,7 @@ import com.app.musicplayer.data.VideoRepository
 import com.app.musicplayer.data.toMediaItem
 import com.app.musicplayer.service.MusicService
 import com.app.musicplayer.playback.MediaPlayerManager
+import com.app.musicplayer.transfer.FileTransferManager
 import com.app.musicplayer.ui.theme.ACCENT_CHOICES
 import com.app.musicplayer.ui.theme.DefaultAccent
 import kotlinx.coroutines.Dispatchers
@@ -60,6 +61,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val ctx = app.applicationContext
     val fx: AudioFxManager = AudioFxManager.get(ctx)
+    val fileTransfer = FileTransferManager(ctx)
     val playlists = PlaylistStore(ctx)
     val stats = StatsStore(ctx)
     val lyricsRepo = LyricsRepository(ctx)
@@ -446,6 +448,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         controller?.removeListener(listener)
         controller?.release()
         controller = null
+        fileTransfer.close()
         super.onCleared()
     }
 }

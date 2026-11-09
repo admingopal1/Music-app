@@ -27,6 +27,7 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -52,6 +53,7 @@ import com.app.musicplayer.ui.screens.PlayerScreen
 import com.app.musicplayer.ui.screens.MiniPlayer
 import com.app.musicplayer.ui.screens.PlaylistsScreen
 import com.app.musicplayer.ui.screens.VideosScreen
+import com.app.musicplayer.ui.screens.FileTransferScreen
 import com.app.musicplayer.ui.theme.MusicTheme
 
 class MainActivity : ComponentActivity() {
@@ -85,6 +87,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
         Tab("EQ & DSP", Icons.Rounded.GraphicEq),
         Tab("Playlists", Icons.AutoMirrored.Rounded.QueueMusic),
         Tab("Videos", Icons.Rounded.VideoLibrary),
+        Tab("Share", Icons.Rounded.Share),
     )
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
@@ -125,7 +128,8 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                         1 -> PlayerScreen(vm)
                         2 -> EqualizerScreen(vm.fx)
                         3 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 1 })
-                        else -> VideosScreen(vm)
+                        4 -> VideosScreen(vm)
+                        else -> FileTransferScreen(vm.fileTransfer)
                     }
                 }
             }

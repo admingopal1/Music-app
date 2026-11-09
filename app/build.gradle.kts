@@ -60,4 +60,6 @@ dependencies {
     implementation("androidx.media3:media3-common:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.palette:palette-ktx:1.0.0")
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+    implementation("com.google.zxing:core:3.5.3")
 }
