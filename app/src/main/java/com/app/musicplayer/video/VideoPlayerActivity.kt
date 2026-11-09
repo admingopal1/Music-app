@@ -17,9 +17,12 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +51,7 @@ import androidx.compose.material.icons.rounded.ScreenRotation
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.ZoomOutMap
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -264,6 +268,9 @@ private fun VideoScreen(
     var tracksMenu by remember { mutableStateOf(false) }
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
+    var zoom by remember { mutableFloatStateOf(1f) }
+    var panX by remember { mutableFloatStateOf(0f) }
+    var panY by remember { mutableFloatStateOf(0f) }
 
     val audio = remember { activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val maxVol = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
@@ -311,7 +318,13 @@ private fun VideoScreen(
                 pv.setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                 pv
             },
-            update = { it.resizeMode = resize },
+            update = {
+                it.resizeMode = resize
+                it.scaleX = zoom
+                it.scaleY = zoom
+                it.translationX = panX
+                it.translationY = panY
+            },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -371,16 +384,38 @@ private fun VideoScreen(
                         },
                     )
                 }
+                .pointerInput(locked) {
+                    if (locked) return@pointerInput
+                    detectTransformGestures { _, pan, zoomChange, _ ->
+                        zoom = (zoom * zoomChange).coerceIn(1f, 3f)
+                        val maxX = size.width * (zoom - 1f) / 2f
+                        val maxY = size.height * (zoom - 1f) / 2f
+                        if (zoom == 1f) {
+                            panX = 0f
+                            panY = 0f
+                        } else {
+                            panX = (panX + pan.x).coerceIn(-maxX, maxX)
+                            panY = (panY + pan.y).coerceIn(-maxY, maxY)
+                        }
+                        if (zoom > 1f) hud = "Zoom ${"%.1f".format(Locale.US, zoom)}x"
+                    }
+                }
         )
 
         // ---- HUD message
-        hud?.let {
-            Text(
-                it, color = Color.White, style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.align(Alignment.Center)
-                    .clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(0.65f))
-                    .padding(horizontal = 18.dp, vertical = 10.dp),
-            )
+        AnimatedVisibility(
+            visible = hud != null,
+            enter = fadeIn() + scaleIn(initialScale = 0.9f),
+            exit = fadeOut() + scaleOut(targetScale = 0.9f),
+            modifier = Modifier.align(Alignment.Center),
+        ) {
+            hud?.let {
+                Text(
+                    it, color = Color.White, style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(0.65f))
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                )
+            }
         }
 
         // ---- locked: only an unlock button
@@ -395,7 +430,8 @@ private fun VideoScreen(
         // ---- controls
         AnimatedVisibility(
             visible = controls && !locked && !inPip,
-            enter = fadeIn(), exit = fadeOut(),
+            enter = fadeIn() + scaleIn(initialScale = 0.98f),
+            exit = fadeOut() + scaleOut(targetScale = 0.98f),
             modifier = Modifier.fillMaxSize(),
         ) {
             Column(Modifier.fillMaxSize().displayCutoutPadding(), verticalArrangement = Arrangement.SpaceBetween) {
@@ -432,6 +468,11 @@ private fun VideoScreen(
                                     onClick = { speed = s; player.setPlaybackSpeed(s); speedMenu = false },
                                 )
                             }
+                        }
+                    }
+                    if (zoom > 1f) {
+                        IconButton(onClick = { zoom = 1f; panX = 0f; panY = 0f; hud = "Zoom reset" }) {
+                            Icon(Icons.Rounded.ZoomOutMap, "Reset zoom", tint = Color.White)
                         }
                     }
                     IconButton(onClick = {
