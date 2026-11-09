@@ -64,14 +64,14 @@ class FileTransferManager(context: Context) {
     private val channel = wifiP2p?.initialize(appContext, Looper.getMainLooper()) {
         updateError("Wi-Fi Direct disconnected. Reopen sharing to reconnect.")
     }
+    private val receivedDirectory by lazy {
+        File(appContext.getExternalFilesDir(null) ?: appContext.filesDir, "Received")
+    }
     private val stateMutable = MutableStateFlow(TransferState(receivedFiles = receivedFiles()))
     val state: StateFlow<TransferState> = stateMutable.asStateFlow()
     private val transferExecutor = Executors.newSingleThreadExecutor()
     private val random = SecureRandom()
     private val lock = Any()
-    private val receivedDirectory by lazy {
-        File(appContext.getExternalFilesDir(null) ?: appContext.filesDir, "Received")
-    }
 
     private var server: TransferHttpServer? = null
     private var token: String? = null
