@@ -21,6 +21,7 @@ import com.app.musicplayer.audio.SonyAudioEffects
 import com.app.musicplayer.data.ArtLoader
 import com.app.musicplayer.data.MediaStoreRepository
 import com.app.musicplayer.data.PlaylistStore
+import com.app.musicplayer.audio.EnhancerSettings
 import com.app.musicplayer.audio.ReplayGain
 import com.app.musicplayer.audio.ReplayGainStore
 import com.app.musicplayer.data.BackupManager
@@ -105,6 +106,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val backupMessage: StateFlow<String?> = _backupMsg.asStateFlow()
     private val _fadeSecs = MutableStateFlow(prefs.getFloat("fade_secs", 0f))
     val fadeSecs: StateFlow<Float> = _fadeSecs.asStateFlow()
+    private val _enhancer = MutableStateFlow(EnhancerSettings.read(prefs))
+    val enhancer: StateFlow<EnhancerSettings> = _enhancer.asStateFlow()
     private val rgStore = ReplayGainStore(ctx)
     private val _rgMode = MutableStateFlow(prefs.getInt("rg_mode", 0))
     val rgMode: StateFlow<Int> = _rgMode.asStateFlow()
@@ -309,6 +312,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The playback service listens to this preference and applies it to ExoPlayer. */
+    fun setEnhancer(s: EnhancerSettings) {
+        s.write(prefs)
+        _enhancer.value = s
+    }
+
     /** 0 = off. Read by the playback service. */
     fun setFadeSecs(secs: Float) {
         val v = secs.coerceIn(0f, 12f)

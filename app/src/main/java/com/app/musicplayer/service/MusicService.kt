@@ -16,6 +16,8 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.app.musicplayer.MainActivity
 import com.app.musicplayer.audio.SonyAudioEffects
+import com.app.musicplayer.audio.EnhancerController
+import com.app.musicplayer.audio.EnhancerProcessor
 import com.app.musicplayer.audio.FadeController
 import com.app.musicplayer.audio.ReplayGainController
 import com.app.musicplayer.audio.ReplayGainProcessor
@@ -27,6 +29,7 @@ class MusicService : MediaSessionService() {
     private var widgetBridge: WidgetBridge? = null
     private var rgController: ReplayGainController? = null
     private var fadeController: FadeController? = null
+    private var enhancerController: EnhancerController? = null
     private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     override fun onCreate() {
@@ -34,6 +37,7 @@ class MusicService : MediaSessionService() {
 
         // ReplayGain: a small audio processor in front of the AudioTrack scales the PCM.
         val rgProcessor = ReplayGainProcessor()
+        val enhancerProcessor = EnhancerProcessor()
         val renderers = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: Context,
@@ -42,7 +46,7 @@ class MusicService : MediaSessionService() {
             ): AudioSink = DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                .setAudioProcessors(arrayOf<AudioProcessor>(rgProcessor))
+                .setAudioProcessors(arrayOf<AudioProcessor>(rgProcessor, enhancerProcessor))
                 .build()
         }
 
@@ -80,6 +84,7 @@ class MusicService : MediaSessionService() {
         widgetBridge = WidgetBridge(this, player)
         rgController = ReplayGainController(this, player, rgProcessor)
         fadeController = FadeController(this, player, rgProcessor)
+        enhancerController = EnhancerController(this, enhancerProcessor)
 
         val openApp = PendingIntent.getActivity(
             this, 0,
@@ -97,6 +102,8 @@ class MusicService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        enhancerController?.release()
+        enhancerController = null
         fadeController?.release()
         fadeController = null
         rgController?.release()

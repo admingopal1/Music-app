@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.app.musicplayer.audio.EnhancerSettings
 import com.app.musicplayer.ui.PlayerViewModel
 import com.app.musicplayer.ui.theme.ACCENT_CHOICES
 
@@ -63,6 +65,7 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     val rgLimit by vm.rgLimit.collectAsStateWithLifecycle()
     val fadeSecs by vm.fadeSecs.collectAsStateWithLifecycle()
     val backupMsg by vm.backupMessage.collectAsStateWithLifecycle()
+    var showEnhancer by remember { mutableStateOf(false) }
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) vm.exportBackup(uri)
     }
@@ -117,6 +120,8 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                     "Accent colour is used when album-art colours are off.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text("Sound", style = MaterialTheme.typography.labelLarge)
+                TextButton(onClick = { showEnhancer = true }) { Text("Sound enhancer (clarity, crossfeed, width, balance)") }
                 Text("Backup & restore", style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { exportPicker.launch("music-player-backup.json") }) { Text("Backup") }
@@ -144,6 +149,47 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
             }
         },
     )
+    if (showEnhancer) EnhancerDialog(vm) { showEnhancer = false }
+}
+
+@Composable
+private fun EnhancerDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
+    val s by vm.enhancer.collectAsStateWithLifecycle()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sound enhancer") },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+        dismissButton = { TextButton(onClick = { vm.setEnhancer(EnhancerSettings()) }) { Text("Reset") } },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                EnhSlider("Clarity (treble detail)", "%.0f%%".format(s.clarity * 100), s.clarity, 0f..1f) { vm.setEnhancer(s.copy(clarity = it)) }
+                EnhSlider("Headphone crossfeed", "%.0f%%".format(s.crossfeed * 100), s.crossfeed, 0f..1f) { vm.setEnhancer(s.copy(crossfeed = it)) }
+                EnhSlider("Stereo width", if (s.width == 1f) "Normal" else "%.0f%%".format(s.width * 100), s.width, 0f..2f) { vm.setEnhancer(s.copy(width = it)) }
+                EnhSlider(
+                    "Balance",
+                    when { s.balance < -0.02f -> "L %.0f%%".format(-s.balance * 100); s.balance > 0.02f -> "R %.0f%%".format(s.balance * 100); else -> "Centre" },
+                    s.balance, -1f..1f,
+                ) { vm.setEnhancer(s.copy(balance = it)) }
+                SettingSwitch("Mono output", s.mono) { vm.setEnhancer(s.copy(mono = it)) }
+                SettingSwitch("Soft limiter (prevents clipping)", s.limiter) { vm.setEnhancer(s.copy(limiter = it)) }
+                Text(
+                    "Works with the equalizer and ReplayGain on 16-bit and float stereo playback.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+    )
+}
+
+@Composable
+private fun EnhSlider(label: String, valueText: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+    Column {
+        Row(Modifier.fillMaxWidth()) {
+            Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Text(valueText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(value = value.coerceIn(range.start, range.endInclusive), onValueChange = onChange, valueRange = range)
+    }
 }
 
 @Composable
