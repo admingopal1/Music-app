@@ -1,0 +1,57 @@
+package com.app.musicplayer.data
+
+import android.content.Context
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+data class SongStats(
+    val favorite: Boolean = false,
+    val rating: Int = 0,          // 0..5
+    val plays: Int = 0,
+    val lastPlayed: Long = 0L,
+)
+
+/** Favorites, 1-5 star ratings, play counts and last-played time. Stored locally (SharedPreferences). */
+class StatsStore(ctx: Context) {
+    private val prefs = ctx.getSharedPreferences("song_stats", Context.MODE_PRIVATE)
+    private val _stats = MutableStateFlow(load())
+    val stats: StateFlow<Map<Long, SongStats>> = _stats.asStateFlow()
+
+    private fun load(): Map<Long, SongStats> {
+        val out = HashMap<Long, SongStats>()
+        for ((k, v) in prefs.all) {
+            val id = k.toLongOrNull() ?: continue
+            val p = (v as? String)?.split(',') ?: continue
+            if (p.size < 4) continue
+            out[id] = SongStats(
+                favorite = p[0] == "1",
+                rating = p[1].toIntOrNull() ?: 0,
+                plays = p[2].toIntOrNull() ?: 0,
+                lastPlayed = p[3].toLongOrNull() ?: 0L,
+            )
+        }
+        return out
+    }
+
+    private fun save(id: Long, s: SongStats) {
+        prefs.edit().putString(id.toString(), "${if (s.favorite) 1 else 0},${s.rating},${s.plays},${s.lastPlayed}").apply()
+        _stats.value = _stats.value + (id to s)
+    }
+
+    fun toggleFavorite(id: Long) {
+        val s = _stats.value[id] ?: SongStats()
+        save(id, s.copy(favorite = !s.favorite))
+    }
+
+    /** Tapping the same star again clears the rating. */
+    fun setRating(id: Long, rating: Int) {
+        val s = _stats.value[id] ?: SongStats()
+        save(id, s.copy(rating = if (s.rating == rating) 0 else rating.coerceIn(0, 5)))
+    }
+
+    fun recordPlay(id: Long) {
+        val s = _stats.value[id] ?: SongStats()
+        save(id, s.copy(plays = s.plays + 1, lastPlayed = System.currentTimeMillis()))
+    }
+}

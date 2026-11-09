@@ -3,6 +3,7 @@ package com.app.musicplayer.ui
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
+import android.net.Uri
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
@@ -10,6 +11,8 @@ import androidx.core.graphics.ColorUtils
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -19,10 +22,12 @@ import com.app.musicplayer.data.ArtLoader
 import com.app.musicplayer.data.MediaStoreRepository
 import com.app.musicplayer.data.PlaylistStore
 import com.app.musicplayer.data.Song
+import com.app.musicplayer.data.StatsStore
 import com.app.musicplayer.data.Video
 import com.app.musicplayer.data.VideoRepository
 import com.app.musicplayer.data.toMediaItem
 import com.app.musicplayer.service.MusicService
+import com.app.musicplayer.ui.theme.ACCENT_CHOICES
 import com.app.musicplayer.ui.theme.DefaultAccent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,6 +38,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+data class QueueItem(val index: Int, val title: String, val artist: String)
 
 data class PlayerUi(
     val isPlaying: Boolean = false,
@@ -49,6 +56,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx = app.applicationContext
     val fx: AudioFxManager = AudioFxManager.get(ctx)
     val playlists = PlaylistStore(ctx)
+    val stats = StatsStore(ctx)
 
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
@@ -74,6 +82,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _dynamic = MutableStateFlow(prefs.getBoolean("dynamic_colors", false))
     val dynamicColors: StateFlow<Boolean> = _dynamic.asStateFlow()
 
+    private val _amoled = MutableStateFlow(prefs.getBoolean("amoled", true))
+    val amoled: StateFlow<Boolean> = _amoled.asStateFlow()
+    private val _accentIdx = MutableStateFlow(prefs.getInt("accent_idx", 0).coerceIn(0, ACCENT_CHOICES.lastIndex))
+    val accentIdx: StateFlow<Int> = _accentIdx.asStateFlow()
+    private val _skipSilence = MutableStateFlow(prefs.getBoolean("skip_silence", false))
+    val skipSilence: StateFlow<Boolean> = _skipSilence.asStateFlow()
+
     private var controller: MediaController? = null
     private var songById: Map<Long, Song> = emptyMap()
     private var artFor: Long? = null
@@ -81,9 +96,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = refreshUi()
+
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            mediaItem?.mediaId?.toLongOrNull()?.let { stats.recordPlay(it) }
+        }
     }
 
     init {
+        _accent.value = baseAccent()
         connect()
         viewModelScope.launch {
             while (true) {
@@ -115,7 +135,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private fun refreshUi() {
         val c = controller ?: return
         val id = c.currentMediaItem?.mediaId?.toLongOrNull()
-        val song = id?.let { songById[it] }
+        val song = id?.let { songById[it] } ?: c.currentMediaItem?.let { streamSong(it, c.duration) }
         val dur = if (c.duration == C.TIME_UNSET) 0L else c.duration
         _ui.value = PlayerUi(
             isPlaying = c.isPlaying,
@@ -139,12 +159,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         artJob = viewModelScope.launch {
             if (song == null) {
                 _art.value = null
-                _accent.value = DefaultAccent
+                _accent.value = baseAccent()
                 return@launch
             }
             val bmp = ArtLoader.load(ctx, song)
             _art.value = bmp
-            _accent.value = if (bmp != null && _dynamic.value) withContext(Dispatchers.Default) { extractAccent(bmp) } else DefaultAccent
+            _accent.value = if (bmp != null && _dynamic.value) withContext(Dispatchers.Default) { extractAccent(bmp) } else baseAccent()
         }
     }
 
@@ -218,6 +238,86 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ------------------------------------------------------------- settings / queue / streams
+
+    private fun baseAccent(): Color = ACCENT_CHOICES[_accentIdx.value.coerceIn(0, ACCENT_CHOICES.lastIndex)]
+
+    fun setAmoled(enabled: Boolean) {
+        prefs.edit().putBoolean("amoled", enabled).apply()
+        _amoled.value = enabled
+    }
+
+    fun setAccentIdx(i: Int) {
+        prefs.edit().putInt("accent_idx", i).apply()
+        _accentIdx.value = i
+        _accent.value = baseAccent()
+        artFor = null
+        refreshUi()
+    }
+
+    /** The playback service listens to this preference and applies it to ExoPlayer. */
+    fun setSkipSilence(enabled: Boolean) {
+        prefs.edit().putBoolean("skip_silence", enabled).apply()
+        _skipSilence.value = enabled
+    }
+
+    private fun streamSong(item: MediaItem, durationMs: Long): Song {
+        val md = item.mediaMetadata
+        return Song(
+            id = -1L,
+            title = md.title?.toString() ?: "Stream",
+            artist = md.artist?.toString() ?: "Stream",
+            album = md.albumTitle?.toString() ?: "",
+            albumId = 0L,
+            durationMs = if (durationMs == C.TIME_UNSET) 0L else durationMs,
+            uri = item.localConfiguration?.uri ?: Uri.EMPTY,
+        )
+    }
+
+    fun playUrl(url: String) {
+        val c = controller ?: return
+        val item = MediaItem.Builder()
+            .setMediaId(url)
+            .setUri(url)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(url.substringAfterLast('/').substringBefore('?').ifBlank { url })
+                    .setArtist("Network stream")
+                    .build()
+            )
+            .build()
+        c.setMediaItems(listOf(item))
+        c.prepare()
+        c.play()
+    }
+
+    fun playNext(song: Song) {
+        val c = controller ?: return
+        if (c.mediaItemCount == 0) playSongs(listOf(song), 0)
+        else c.addMediaItem(c.currentMediaItemIndex + 1, song.toMediaItem())
+    }
+
+    fun addToQueue(song: Song) {
+        val c = controller ?: return
+        if (c.mediaItemCount == 0) playSongs(listOf(song), 0) else c.addMediaItem(song.toMediaItem())
+    }
+
+    fun queueItems(): List<QueueItem> {
+        val c = controller ?: return emptyList()
+        return (0 until c.mediaItemCount).map { i ->
+            val md = c.getMediaItemAt(i).mediaMetadata
+            QueueItem(i, md.title?.toString() ?: "Unknown", md.artist?.toString() ?: "")
+        }
+    }
+
+    fun currentIndex(): Int = controller?.currentMediaItemIndex ?: 0
+    fun jumpTo(index: Int) { controller?.let { it.seekToDefaultPosition(index); it.play() } }
+    fun removeFromQueue(index: Int) { controller?.removeMediaItem(index) }
+    fun moveInQueue(from: Int, to: Int) {
+        val c = controller ?: return
+        if (from in 0 until c.mediaItemCount && to in 0 until c.mediaItemCount) c.moveMediaItem(from, to)
+    }
+
     // ------------------------------------------------------------- VLC-style extras
 
     fun setSpeed(speed: Float) {
@@ -237,16 +337,22 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSleepTimer(minutes: Int) {
         sleepJob?.cancel()
-        if (minutes <= 0) { _sleepLeft.value = 0L; return }
+        if (minutes <= 0) {
+            _sleepLeft.value = 0L
+            runCatching { controller?.volume = 1f }
+            return
+        }
         sleepJob = viewModelScope.launch {
             var left = minutes * 60_000L
             while (left > 0) {
                 _sleepLeft.value = left
+                if (left <= 15_000L) runCatching { controller?.volume = (left / 15_000f).coerceIn(0f, 1f) }
                 delay(1000)
                 left -= 1000
             }
             _sleepLeft.value = 0L
             controller?.pause()
+            runCatching { controller?.volume = 1f }
         }
     }
 

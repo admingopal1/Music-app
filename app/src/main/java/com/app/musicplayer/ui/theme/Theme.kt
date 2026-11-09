@@ -14,28 +14,38 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
-val DefaultAccent = Color(0xFFFF8800) // VLC-style orange
-private val Base = Color(0xFF050505) // near-AMOLED black
+/** Accent colours the user can pick in Settings (first one is the VLC-style orange default). */
+val ACCENT_CHOICES = listOf(
+    Color(0xFFFF8800), // orange
+    Color(0xFFE53935), // red
+    Color(0xFF1E88E5), // blue
+    Color(0xFF43A047), // green
+    Color(0xFF8E7CFF), // purple
+    Color(0xFFEC407A), // pink
+)
+val DefaultAccent = ACCENT_CHOICES[0]
+
 private val TextHigh = Color(0xFFEDEAF6)
 private val TextMid = Color(0xFFB9B4C8)
 
-/** Expressive dark theme. [accent] comes from the album art (Palette) and cross-fades smoothly. */
+/** Dark theme. [accent] comes from Settings or the album art (Palette) and cross-fades smoothly. */
 @Composable
-fun MusicTheme(accent: Color = DefaultAccent, content: @Composable () -> Unit) {
+fun MusicTheme(accent: Color = DefaultAccent, amoled: Boolean = true, content: @Composable () -> Unit) {
     val a by animateColorAsState(accent, tween(700), label = "accent")
     val onAccent = if (a.luminance() > 0.5f) Color.Black else Color.White
+    val base = if (amoled) Color(0xFF050505) else Color(0xFF15151D)
     val scheme = darkColorScheme(
         primary = a,
         onPrimary = onAccent,
-        primaryContainer = lerp(Base, a, 0.35f),
+        primaryContainer = lerp(base, a, 0.35f),
         onPrimaryContainer = Color.White,
         secondary = lerp(a, Color.White, 0.25f),
         onSecondary = Color.Black,
-        background = lerp(Base, a, 0.03f),
+        background = lerp(base, a, 0.03f),
         onBackground = TextHigh,
-        surface = lerp(Base, a, 0.07f),
+        surface = lerp(base, a, 0.07f),
         onSurface = TextHigh,
-        surfaceVariant = lerp(Base, a, 0.14f),
+        surfaceVariant = lerp(base, a, 0.14f),
         onSurfaceVariant = TextMid,
         outline = Color.White.copy(alpha = 0.18f),
     )

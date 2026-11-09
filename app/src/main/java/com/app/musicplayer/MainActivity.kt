@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -48,6 +49,7 @@ import com.app.musicplayer.ui.PlayerViewModel
 import com.app.musicplayer.ui.screens.EqualizerScreen
 import com.app.musicplayer.ui.screens.LibraryScreen
 import com.app.musicplayer.ui.screens.MainPlayerScreen
+import com.app.musicplayer.ui.screens.MiniPlayer
 import com.app.musicplayer.ui.screens.PlaylistsScreen
 import com.app.musicplayer.ui.screens.VideosScreen
 import com.app.musicplayer.ui.theme.MusicTheme
@@ -68,6 +70,7 @@ private data class Tab(val label: String, val icon: ImageVector)
 @Composable
 private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     val accent by vm.accent.collectAsStateWithLifecycle()
+    val amoled by vm.amoled.collectAsStateWithLifecycle()
 
     val permissions = rememberPermissions()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -85,10 +88,12 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     )
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
-    MusicTheme(accent = accent) {
+    MusicTheme(accent = accent, amoled = amoled) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
+              Column {
+                if (tab != 1) MiniPlayer(vm) { tab = 1 }
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)) {
                     tabs.forEachIndexed { i, t ->
                         NavigationBarItem(
@@ -106,6 +111,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                         )
                     }
                 }
+              }
             },
         ) { inner ->
             Box(Modifier.fillMaxSize().padding(inner).statusBarsPadding()) {

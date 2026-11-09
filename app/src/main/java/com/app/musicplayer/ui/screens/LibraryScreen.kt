@@ -2,6 +2,7 @@ package com.app.musicplayer.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,16 +16,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SortByAlpha
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -56,20 +60,25 @@ import com.app.musicplayer.data.asClock
 import com.app.musicplayer.ui.PlayerViewModel
 
 private val SORT_LABELS = listOf("Title", "Artist", "Album", "Duration (longest first)")
+private val MODES = listOf("Songs", "Albums", "Artists", "Folders", "Favorites", "Recent", "Most played", "New")
+
+private data class Group(val key: String, val title: String, val subtitle: String, val songs: List<Song>)
 
 @Composable
 fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     val songs by vm.songs.collectAsStateWithLifecycle()
     val ui by vm.ui.collectAsStateWithLifecycle()
     val playlists by vm.playlists.lists.collectAsStateWithLifecycle()
-    val dynamic by vm.dynamicColors.collectAsStateWithLifecycle()
+    val stats by vm.stats.stats.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     var sortIdx by rememberSaveable { mutableIntStateOf(0) }
-    var mode by rememberSaveable { mutableIntStateOf(0) }            // 0 = Songs, 1 = Folders
-    var openFolder by rememberSaveable { mutableStateOf<String?>(null) }
+    var mode by rememberSaveable { mutableIntStateOf(0) }
+    var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
     var sortMenu by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var showStream by remember { mutableStateOf(false) }
 
-    val filtered = remember(songs, query, sortIdx) {
+    val sorted = remember(songs, query, sortIdx) {
         val base = if (query.isBlank()) songs
         else songs.filter {
             it.title.contains(query, true) || it.artist.contains(query, true) || it.album.contains(query, true)
@@ -81,22 +90,40 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             else -> base.sortedBy { it.title.lowercase() }
         }
     }
-    val folders = remember(filtered) {
-        filtered.groupBy { it.folder }.toList().sortedBy { it.first.lowercase() }
+    // Smart lists (modes 4..7)
+    val smart: List<Song>? = remember(sorted, stats, mode) {
+        when (mode) {
+            4 -> sorted.filter { stats[it.id]?.favorite == true }
+            5 -> sorted.filter { (stats[it.id]?.lastPlayed ?: 0L) > 0L }
+                .sortedByDescending { stats[it.id]?.lastPlayed ?: 0L }.take(100)
+            6 -> sorted.filter { (stats[it.id]?.plays ?: 0) > 0 }
+                .sortedByDescending { stats[it.id]?.plays ?: 0 }.take(100)
+            7 -> sorted.sortedByDescending { it.dateAdded }.take(100)
+            else -> null
+        }
     }
+    // Grouped views (modes 1..3)
+    val groups = remember(sorted, mode) {
+        when (mode) {
+            1 -> sorted.groupBy { it.album }.map { (k, v) -> Group(k, k, v.first().artist, v) }
+            2 -> sorted.groupBy { it.artist }.map { (k, v) ->
+                Group(k, k, "${v.map { it.album }.distinct().size} albums", v)
+            }
+            3 -> sorted.groupBy { it.folder }.map { (k, v) ->
+                Group(k, k.substringAfterLast('/').ifBlank { "Unknown folder" }, k, v)
+            }
+            else -> emptyList()
+        }.sortedBy { it.title.lowercase() }
+    }
+    val inGroupMode = mode in 1..3
 
     Column(Modifier.fillMaxSize()) {
         Row(
-            Modifier.fillMaxWidth().padding(start = 20.dp, top = 12.dp, end = 8.dp),
+            Modifier.fillMaxWidth().padding(start = 20.dp, top = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Library", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
-            IconButton(onClick = { vm.setDynamicColors(!dynamic) }) {
-                Icon(
-                    Icons.Rounded.Palette, "Album colours",
-                    tint = if (dynamic) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            IconButton(onClick = { showStream = true }) { Icon(Icons.Rounded.Link, "Play stream URL") }
             Box {
                 IconButton(onClick = { sortMenu = true }) { Icon(Icons.Rounded.SortByAlpha, "Sort") }
                 DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
@@ -110,6 +137,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                     }
                 }
             }
+            IconButton(onClick = { showSettings = true }) { Icon(Icons.Rounded.Settings, "Settings") }
         }
         Text(
             "${songs.size} songs on this device", style = MaterialTheme.typography.bodyMedium,
@@ -123,9 +151,13 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             singleLine = true, shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         )
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ModePill("Songs", mode == 0) { mode = 0; openFolder = null }
-            ModePill("Folders", mode == 1) { mode = 1 }
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MODES.forEachIndexed { i, label ->
+                ModePill(label, mode == i) { mode = i; openGroup = null }
+            }
         }
 
         if (songs.isEmpty()) {
@@ -139,44 +171,63 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                 )
                 Button(onClick = vm::loadLibrary, modifier = Modifier.padding(top = 16.dp)) { Text("Scan again") }
             }
-        } else if (mode == 1 && openFolder == null) {
+        } else if (inGroupMode && openGroup == null) {
             LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp)) {
-                itemsIndexed(folders, key = { _, f -> f.first }) { _, (path, list) ->
-                    FolderRow(
-                        name = path.substringAfterLast('/').ifBlank { "Unknown folder" },
-                        path = path, count = list.size,
-                        onClick = { openFolder = path },
-                    )
+                itemsIndexed(groups, key = { _, g -> g.key }) { _, g ->
+                    GroupRow(g.title, g.subtitle, g.songs.size) { openGroup = g.key }
                 }
             }
         } else {
-            val shown = if (mode == 1) filtered.filter { it.folder == openFolder } else filtered
-            if (mode == 1) {
+            val shown = when {
+                inGroupMode -> groups.firstOrNull { it.key == openGroup }?.songs.orEmpty()
+                smart != null -> smart
+                else -> sorted
+            }
+            if (inGroupMode) {
                 Row(
-                    Modifier.fillMaxWidth().clickable { openFolder = null }.padding(horizontal = 16.dp, vertical = 6.dp),
+                    Modifier.fillMaxWidth().clickable { openGroup = null }.padding(horizontal = 16.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        openFolder.orEmpty().substringAfterLast('/').ifBlank { "Unknown folder" },
+                        groups.firstOrNull { it.key == openGroup }?.title.orEmpty(),
                         fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            if (shown.isEmpty()) {
+                Text(
+                    when (mode) {
+                        4 -> "No favorites yet. Open a song's menu and tap Favorite."
+                        5 -> "Nothing played yet."
+                        6 -> "Play some songs and your most played will show up here."
+                        else -> "Nothing here."
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(24.dp),
+                )
             }
             LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp)) {
                 itemsIndexed(shown, key = { _, s -> s.id }) { index, song ->
                     SongRow(
                         song = song,
                         current = ui.song?.id == song.id,
+                        favorite = stats[song.id]?.favorite == true,
                         playlistNames = playlists.keys.toList(),
                         onClick = { vm.playSongs(shown, index); onOpenPlayer() },
+                        onFavorite = { vm.stats.toggleFavorite(song.id) },
+                        onPlayNext = { vm.playNext(song) },
+                        onAddToQueue = { vm.addToQueue(song) },
                         onAddToPlaylist = { vm.playlists.addSong(it, song.id) },
                     )
                 }
             }
         }
     }
+
+    if (showSettings) SettingsDialog(vm) { showSettings = false }
+    if (showStream) StreamDialog(onPlay = { vm.playUrl(it); onOpenPlayer() }) { showStream = false }
 }
 
 @Composable
@@ -193,7 +244,7 @@ private fun ModePill(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FolderRow(name: String, path: String, count: Int, onClick: () -> Unit) {
+private fun GroupRow(title: String, subtitle: String, count: Int, onClick: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
@@ -204,9 +255,9 @@ private fun FolderRow(name: String, path: String, count: Int, onClick: () -> Uni
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Rounded.Folder, null, tint = accent) }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+            Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
             Text(
-                path, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -216,8 +267,9 @@ private fun FolderRow(name: String, path: String, count: Int, onClick: () -> Uni
 
 @Composable
 private fun SongRow(
-    song: Song, current: Boolean, playlistNames: List<String>,
-    onClick: () -> Unit, onAddToPlaylist: (String) -> Unit,
+    song: Song, current: Boolean, favorite: Boolean, playlistNames: List<String>,
+    onClick: () -> Unit, onFavorite: () -> Unit, onPlayNext: () -> Unit, onAddToQueue: () -> Unit,
+    onAddToPlaylist: (String) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -242,10 +294,21 @@ private fun SongRow(
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text(song.durationMs.asClock(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (favorite) Icon(Icons.Rounded.Favorite, "Favorite", tint = accent, modifier = Modifier.size(16.dp).padding(end = 0.dp))
+        Text(
+            song.durationMs.asClock(),
+            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 6.dp),
+        )
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(
+                    text = { Text(if (favorite) "Remove from favorites" else "Favorite") },
+                    onClick = { onFavorite(); menu = false },
+                )
+                DropdownMenuItem(text = { Text("Play next") }, onClick = { onPlayNext(); menu = false })
+                DropdownMenuItem(text = { Text("Add to queue") }, onClick = { onAddToQueue(); menu = false })
                 if (playlistNames.isEmpty()) {
                     DropdownMenuItem(text = { Text("Create a playlist first") }, onClick = { menu = false }, enabled = false)
                 } else {

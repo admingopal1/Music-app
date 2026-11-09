@@ -35,7 +35,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -48,6 +53,7 @@ import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -83,6 +89,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
+import com.app.musicplayer.data.SongStats
 import com.app.musicplayer.data.asClock
 import com.app.musicplayer.ui.PlayerUi
 import com.app.musicplayer.ui.PlayerViewModel
@@ -178,6 +185,8 @@ fun MainPlayerScreen(vm: PlayerViewModel) {
                     }
                 }
                 Spacer(Modifier.height(12.dp))
+                PlayerExtras(vm, ui, accent)
+                Spacer(Modifier.height(12.dp))
                 PlayerTools(vm, ui, accent)
                 Spacer(Modifier.height(12.dp))
             }
@@ -186,6 +195,43 @@ fun MainPlayerScreen(vm: PlayerViewModel) {
 }
 
 // ------------------------------------------------------------------ VLC-style tools
+
+@Composable
+private fun PlayerExtras(vm: PlayerViewModel, ui: PlayerUi, accent: Color) {
+    val stats by vm.stats.stats.collectAsStateWithLifecycle()
+    val song = ui.song
+    val st = song?.let { stats[it.id] } ?: SongStats()
+    val real = song != null && song.id >= 0     // streams have no stats
+    var showQueue by remember { mutableStateOf(false) }
+
+    GlassCard(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { if (real) vm.stats.toggleFavorite(song!!.id) }) {
+                Icon(
+                    if (st.favorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, "Favorite",
+                    tint = if (st.favorite) accent else Color.White.copy(0.75f),
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                for (i in 1..5) {
+                    Icon(
+                        if (i <= st.rating) Icons.Rounded.Star else Icons.Rounded.StarBorder, "Rate $i",
+                        tint = if (i <= st.rating) accent else Color.White.copy(0.55f),
+                        modifier = Modifier.size(30.dp).clickable { if (real) vm.stats.setRating(song!!.id, i) },
+                    )
+                }
+            }
+            IconButton(onClick = { showQueue = true }) {
+                Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Queue", tint = Color.White.copy(0.85f))
+            }
+        }
+    }
+    if (showQueue) QueueDialog(vm) { showQueue = false }
+}
 
 private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f, 4f)
 private val SLEEP_MINUTES = listOf(15, 30, 45, 60, 90)
