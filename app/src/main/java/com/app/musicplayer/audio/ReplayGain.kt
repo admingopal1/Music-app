@@ -1,0 +1,204 @@
+package com.app.musicplayer.audio
+
+import android.content.Context
+import android.content.SharedPreferences
+import androidx.media3.common.C
+import androidx.media3.common.Metadata
+import androidx.media3.common.Player
+import androidx.media3.common.Tracks
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.BaseAudioProcessor
+import androidx.media3.extractor.metadata.flac.VorbisComment
+import androidx.media3.extractor.metadata.id3.InternalFrame
+import androidx.media3.extractor.metadata.id3.TextInformationFrame
+import java.nio.ByteBuffer
+import kotlin.math.log10
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
+
+/** Gain / peak values read from a file's ReplayGain tags (dB and linear peak). */
+data class RgInfo(val trackGain: Float?, val trackPeak: Float?, val albumGain: Float?, val albumPeak: Float?)
+
+object ReplayGain {
+    const val MODE_OFF = 0
+    const val MODE_TRACK = 1
+    const val MODE_ALBUM = 2
+
+    data class Settings(val mode: Int, val preampDb: Float, val fallbackDb: Float, val limit: Boolean)
+
+    fun readSettings(p: SharedPreferences) = Settings(
+        mode = p.getInt("rg_mode", MODE_OFF),
+        preampDb = p.getFloat("rg_preamp", 0f),
+        fallbackDb = p.getFloat("rg_fallback", 0f),
+        limit = p.getBoolean("rg_limit", true),
+    )
+
+    fun dbToLinear(db: Float): Float = 10.0.pow(db / 20.0).toFloat()
+
+    /** The gain in dB that will be applied for this track, or null when ReplayGain is off. */
+    fun appliedDb(info: RgInfo?, s: Settings): Float? {
+        if (s.mode == MODE_OFF) return null
+        val gain: Float? = if (info == null) null
+        else if (s.mode == MODE_ALBUM) info.albumGain ?: info.trackGain
+        else info.trackGain ?: info.albumGain
+        val peak: Float? = if (info == null) null
+        else if (s.mode == MODE_ALBUM) info.albumPeak ?: info.trackPeak
+        else info.trackPeak ?: info.albumPeak
+
+        var db = if (gain == null) s.fallbackDb else gain + s.preampDb
+        if (s.limit && peak != null && peak > 0f) {
+            val maxDb = -20f * log10(peak)       // gain at which the loudest sample just reaches full scale
+            db = min(db, maxDb)
+        }
+        return db.coerceIn(-24f, 24f)
+    }
+
+    private val NUM = Regex("[-+]?\\d+(?:[.,]\\d+)?")
+    private fun num(v: String?): Float? = v?.let { NUM.find(it)?.value?.replace(',', '.')?.toFloatOrNull() }
+
+    /** [tags] keys must be lower-case. Handles ReplayGain 2 tags and Opus R128 tags. */
+    fun fromTags(tags: Map<String, String>): RgInfo? {
+        var tg = num(tags["replaygain_track_gain"])
+        var ag = num(tags["replaygain_album_gain"])
+        val tp = num(tags["replaygain_track_peak"])
+        val ap = num(tags["replaygain_album_peak"])
+        // Opus R128 gains are Q7.8 dB relative to -23 LUFS; ReplayGain 2 uses -18 LUFS.
+        if (tg == null) tg = num(tags["r128_track_gain"])?.let { it / 256f + 5f }
+        if (ag == null) ag = num(tags["r128_album_gain"])?.let { it / 256f + 5f }
+        if (tg == null && ag == null) return null
+        return RgInfo(tg, tp, ag, ap)
+    }
+}
+
+/** Remembers tag values per library song id so the gain is known before a track starts. */
+class ReplayGainStore(ctx: Context) {
+    private val prefs = ctx.getSharedPreferences("replaygain", Context.MODE_PRIVATE)
+
+    fun get(id: String): RgInfo? {
+        val p = prefs.getString(id, null)?.split(';') ?: return null
+        if (p.size < 4) return null
+        return RgInfo(p[0].toFloatOrNull(), p[1].toFloatOrNull(), p[2].toFloatOrNull(), p[3].toFloatOrNull())
+    }
+
+    fun put(id: String, i: RgInfo) {
+        prefs.edit().putString(id, "${i.trackGain ?: ""};${i.trackPeak ?: ""};${i.albumGain ?: ""};${i.albumPeak ?: ""}").apply()
+    }
+}
+
+/** Scales 16-bit / float PCM by a smoothly changing gain (30 ms ramp, so track changes don't click). */
+class ReplayGainProcessor : BaseAudioProcessor() {
+    @Volatile private var target = 1f
+    private var current = 1f
+    private var step = 0.001f
+    private var channels = 2
+    private var encoding = C.ENCODING_INVALID
+
+    fun setGainDb(db: Float) { target = ReplayGain.dbToLinear(db) }
+
+    override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+        val enc = inputAudioFormat.encoding
+        if (enc != C.ENCODING_PCM_16BIT && enc != C.ENCODING_PCM_FLOAT) {
+            return AudioProcessor.AudioFormat.NOT_SET   // leave other formats untouched
+        }
+        encoding = enc
+        channels = inputAudioFormat.channelCount.coerceAtLeast(1)
+        step = 1f / max(1f, inputAudioFormat.sampleRate * 0.03f)
+        current = target
+        return inputAudioFormat
+    }
+
+    override fun queueInput(inputBuffer: ByteBuffer) {
+        val size = inputBuffer.remaining()
+        if (size == 0) return
+        val out = replaceOutputBuffer(size)
+        val t = target
+        if (current == t && t == 1f) {
+            out.put(inputBuffer)
+            out.flip()
+            return
+        }
+        if (encoding == C.ENCODING_PCM_16BIT) {
+            while (inputBuffer.remaining() >= 2 * channels) {
+                if (current != t) current = if (current < t) min(t, current + step) else max(t, current - step)
+                for (c in 0 until channels) {
+                    val s = (inputBuffer.getShort() * current).toInt().coerceIn(-32768, 32767)
+                    out.putShort(s.toShort())
+                }
+            }
+        } else {
+            while (inputBuffer.remaining() >= 4 * channels) {
+                if (current != t) current = if (current < t) min(t, current + step) else max(t, current - step)
+                for (c in 0 until channels) {
+                    out.putFloat((inputBuffer.getFloat() * current).coerceIn(-1f, 1f))
+                }
+            }
+        }
+        while (inputBuffer.hasRemaining()) out.put(inputBuffer.get())   // any partial frame
+        out.flip()
+    }
+
+    override fun onFlush() { current = target }
+    override fun onReset() { encoding = C.ENCODING_INVALID }
+}
+
+/** Reads ReplayGain tags of the playing track (ExoPlayer exposes them) and drives [ReplayGainProcessor]. */
+class ReplayGainController(
+    ctx: Context,
+    private val player: Player,
+    private val processor: ReplayGainProcessor,
+) : Player.Listener {
+    private val store = ReplayGainStore(ctx)
+    private val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key != null && key.startsWith("rg_")) apply()
+    }
+
+    init {
+        player.addListener(this)
+        prefs.registerOnSharedPreferenceChangeListener(prefListener)
+        apply()
+    }
+
+    override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) { apply() }
+
+    override fun onTracksChanged(tracks: Tracks) {
+        val tags = HashMap<String, String>()
+        for (g in tracks.groups) {
+            if (g.type != C.TRACK_TYPE_AUDIO || !g.isSelected) continue
+            for (i in 0 until g.length) {
+                val md = g.getTrackFormat(i).metadata ?: continue
+                for (j in 0 until md.length()) collect(md.get(j), tags)
+            }
+        }
+        val info = ReplayGain.fromTags(tags)
+        val id = player.currentMediaItem?.mediaId
+        if (info != null && id != null && id.toLongOrNull() != null) store.put(id, info)
+        apply()
+    }
+
+    private fun collect(e: Metadata.Entry, out: MutableMap<String, String>) {
+        when (e) {
+            is TextInformationFrame -> {
+                val k = e.description
+                val v = e.values.firstOrNull()
+                if (e.id == "TXXX" && k != null && v != null) out[k.lowercase()] = v
+            }
+            is InternalFrame -> out[e.description.lowercase()] = e.text
+            is VorbisComment -> out[e.key.lowercase()] = e.value
+            else -> Unit
+        }
+    }
+
+    fun apply() {
+        val id = player.currentMediaItem?.mediaId
+        val info = id?.let { store.get(it) }
+        val db = ReplayGain.appliedDb(info, ReplayGain.readSettings(prefs))
+        processor.setGainDb(db ?: 0f)
+    }
+
+    fun release() {
+        player.removeListener(this)
+        prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
+    }
+}

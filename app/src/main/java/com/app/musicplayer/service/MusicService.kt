@@ -1,28 +1,50 @@
 package com.app.musicplayer.service
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.SharedPreferences
 import android.content.Intent
 import androidx.media3.common.AudioAttributes
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.app.musicplayer.MainActivity
 import com.app.musicplayer.audio.AudioFxManager
+import com.app.musicplayer.audio.ReplayGainController
+import com.app.musicplayer.audio.ReplayGainProcessor
 import com.app.musicplayer.widget.WidgetBridge
 
 class MusicService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private var widgetBridge: WidgetBridge? = null
+    private var rgController: ReplayGainController? = null
     private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     override fun onCreate() {
         super.onCreate()
 
-        val player = ExoPlayer.Builder(this)
+        // ReplayGain: a small audio processor in front of the AudioTrack scales the PCM.
+        val rgProcessor = ReplayGainProcessor()
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf<AudioProcessor>(rgProcessor))
+                .build()
+        }
+
+        val player = ExoPlayer.Builder(this, renderers)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -54,6 +76,7 @@ class MusicService : MediaSessionService() {
 
         // Keeps the home screen widgets in sync with what is playing.
         widgetBridge = WidgetBridge(this, player)
+        rgController = ReplayGainController(this, player, rgProcessor)
 
         val openApp = PendingIntent.getActivity(
             this, 0,
@@ -71,6 +94,8 @@ class MusicService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        rgController?.release()
+        rgController = null
         widgetBridge?.release()
         widgetBridge = null
         prefsListener?.let { getSharedPreferences("settings", MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(it) }

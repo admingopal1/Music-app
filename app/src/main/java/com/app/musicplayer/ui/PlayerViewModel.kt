@@ -21,6 +21,8 @@ import com.app.musicplayer.audio.AudioFxManager
 import com.app.musicplayer.data.ArtLoader
 import com.app.musicplayer.data.MediaStoreRepository
 import com.app.musicplayer.data.PlaylistStore
+import com.app.musicplayer.audio.ReplayGain
+import com.app.musicplayer.audio.ReplayGainStore
 import com.app.musicplayer.data.Song
 import com.app.musicplayer.data.StatsStore
 import com.app.musicplayer.lyrics.LyricsRepository
@@ -90,6 +92,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val accentIdx: StateFlow<Int> = _accentIdx.asStateFlow()
     private val _skipSilence = MutableStateFlow(prefs.getBoolean("skip_silence", false))
     val skipSilence: StateFlow<Boolean> = _skipSilence.asStateFlow()
+
+    private val rgStore = ReplayGainStore(ctx)
+    private val _rgMode = MutableStateFlow(prefs.getInt("rg_mode", 0))
+    val rgMode: StateFlow<Int> = _rgMode.asStateFlow()
+    private val _rgPreamp = MutableStateFlow(prefs.getFloat("rg_preamp", 0f))
+    val rgPreamp: StateFlow<Float> = _rgPreamp.asStateFlow()
+    private val _rgFallback = MutableStateFlow(prefs.getFloat("rg_fallback", 0f))
+    val rgFallback: StateFlow<Float> = _rgFallback.asStateFlow()
+    private val _rgLimit = MutableStateFlow(prefs.getBoolean("rg_limit", true))
+    val rgLimit: StateFlow<Boolean> = _rgLimit.asStateFlow()
 
     private var controller: MediaController? = null
     private var songById: Map<Long, Song> = emptyMap()
@@ -265,6 +277,25 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The playback service listens to this preference and applies it to ExoPlayer. */
+    // ReplayGain settings are read by the playback service (same preferences file).
+    fun setRgMode(mode: Int) { prefs.edit().putInt("rg_mode", mode).apply(); _rgMode.value = mode }
+    fun setRgPreamp(db: Float) {
+        val v = db.coerceIn(-12f, 12f); prefs.edit().putFloat("rg_preamp", v).apply(); _rgPreamp.value = v
+    }
+    fun setRgFallback(db: Float) {
+        val v = db.coerceIn(-24f, 12f); prefs.edit().putFloat("rg_fallback", v).apply(); _rgFallback.value = v
+    }
+    fun setRgLimit(on: Boolean) { prefs.edit().putBoolean("rg_limit", on).apply(); _rgLimit.value = on }
+
+    /** e.g. "-6.2 dB" for the current song, "no tag · +0.0 dB" when the file has no ReplayGain tag. */
+    fun replayGainLabel(songId: Long): String? {
+        val s = ReplayGain.readSettings(prefs)
+        if (s.mode == ReplayGain.MODE_OFF) return null
+        val info = rgStore.get(songId.toString())
+        val db = ReplayGain.appliedDb(info, s) ?: return null
+        return (if (info == null) "no tag · " else "") + "%+.1f dB".format(db)
+    }
+
     fun setSkipSilence(enabled: Boolean) {
         prefs.edit().putBoolean("skip_silence", enabled).apply()
         _skipSilence.value = enabled

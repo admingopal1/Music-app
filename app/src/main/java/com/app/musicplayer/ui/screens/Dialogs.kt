@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
@@ -56,6 +57,10 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     val skip by vm.skipSilence.collectAsStateWithLifecycle()
     val accentIdx by vm.accentIdx.collectAsStateWithLifecycle()
     val lyricsFolder by vm.lyricsRepo.folder.collectAsStateWithLifecycle()
+    val rgMode by vm.rgMode.collectAsStateWithLifecycle()
+    val rgPreamp by vm.rgPreamp.collectAsStateWithLifecycle()
+    val rgFallback by vm.rgFallback.collectAsStateWithLifecycle()
+    val rgLimit by vm.rgLimit.collectAsStateWithLifecycle()
     val treePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) vm.lyricsRepo.setTree(uri)
     }
@@ -69,6 +74,21 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                 SettingSwitch("AMOLED black theme", amoled, vm::setAmoled)
                 SettingSwitch("Colours from album art", dynamic, vm::setDynamicColors)
                 SettingSwitch("Skip silence", skip, vm::setSkipSilence)
+                Text("ReplayGain (even volume across songs)", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("Off", "Track", "Album").forEachIndexed { i, label ->
+                        RgPill(label, rgMode == i) { vm.setRgMode(i) }
+                    }
+                }
+                if (rgMode != 0) {
+                    StepRow("Pre-amp (tagged songs)", rgPreamp) { vm.setRgPreamp(it) }
+                    StepRow("Songs without tags", rgFallback) { vm.setRgFallback(it) }
+                    SettingSwitch("Prevent clipping", rgLimit, vm::setRgLimit)
+                    Text(
+                        "Reads ReplayGain tags (MP3, FLAC, Ogg, Opus, M4A). Tags are picked up when a song first plays.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text("Accent colour", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ACCENT_CHOICES.forEachIndexed { i, c ->
@@ -102,6 +122,29 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
             }
         },
     )
+}
+
+@Composable
+private fun RgPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    val accent = MaterialTheme.colorScheme.primary
+    Box(
+        Modifier.clip(RoundedCornerShape(50))
+            .background(if (selected) accent.copy(0.25f) else MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+    ) {
+        Text(label, color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun StepRow(label: String, value: Float, onChange: (Float) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        TextButton(onClick = { onChange(value - 0.5f) }) { Text("\u2212") }
+        Text("%+.1f dB".format(value), style = MaterialTheme.typography.labelLarge)
+        TextButton(onClick = { onChange(value + 0.5f) }) { Text("+") }
+    }
 }
 
 @Composable

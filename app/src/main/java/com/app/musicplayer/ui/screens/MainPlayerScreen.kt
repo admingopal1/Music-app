@@ -189,6 +189,14 @@ fun MainPlayerScreen(vm: PlayerViewModel) {
                 PlayerExtras(vm, ui, accent)
                 Spacer(Modifier.height(12.dp))
                 PlayerTools(vm, ui, accent)
+                val rgLabel = remember(ui.song?.id, ui.positionMs / 3000) {
+                    ui.song?.takeIf { it.id >= 0 }?.let { vm.replayGainLabel(it.id) }
+                }
+                if (rgLabel != null) {
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
+                        Text("ReplayGain  $rgLabel", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(0.6f))
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
             }
         }
