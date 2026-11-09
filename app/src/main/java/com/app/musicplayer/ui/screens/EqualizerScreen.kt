@@ -49,7 +49,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.app.musicplayer.audio.AudioFxManager
+import com.app.musicplayer.audio.SonyAudioEffects
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -57,7 +57,7 @@ import kotlin.math.sin
 private val REVERB_NAMES = listOf("Off", "Small room", "Medium room", "Large room", "Medium hall", "Large hall", "Plate")
 
 @Composable
-fun EqualizerScreen(fx: AudioFxManager) {
+fun EqualizerScreen(fx: SonyAudioEffects) {
     val s by fx.state.collectAsStateWithLifecycle()
     var profileName by rememberSaveable { mutableStateOf("") }
     val on = s.enabled && s.available
@@ -81,7 +81,7 @@ fun EqualizerScreen(fx: AudioFxManager) {
 
         // Presets + saved profiles
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(AudioFxManager.PRESETS.keys.toList()) { name ->
+            items(SonyAudioEffects.PRESETS.keys.toList()) { name ->
                 FilterChip(selected = s.activePreset == name, onClick = { fx.applyPreset(name) }, enabled = s.available, label = { Text(name) })
             }
             items(s.customProfiles) { name ->
@@ -121,12 +121,12 @@ fun EqualizerScreen(fx: AudioFxManager) {
         // Knobs
         GlassCard(Modifier.fillMaxWidth()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Knob("Bass Boost", s.bassStrength, "${(s.bassStrength * 100).roundToInt()}%", on && s.bassSupported) { fx.setBassStrength(it) }
+                Knob("Clear Bass", s.bassStrength, "${(s.bassStrength * 100).roundToInt()}%", on && s.bassSupported) { fx.setClearBass(it) }
                 Knob("Surround 3D", s.virtualizerStrength, "${(s.virtualizerStrength * 100).roundToInt()}%", on && s.virtSupported) { fx.setVirtualizerStrength(it) }
                 Knob("Loudness", s.loudnessGain, "+%.1f dB".format(s.loudnessGain * 10f), on && s.loudnessSupported) { fx.setLoudnessGain(it) }
             }
             Text(
-                "Drag a knob up / right to increase. Loudness adds up to +10 dB of limiter-protected gain.",
+                "Hardware equalizer band count varies by device. Drag a knob up / right to increase. Loudness adds up to +10 dB of limiter-protected gain.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
@@ -51,6 +52,8 @@ import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -59,12 +62,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -79,6 +84,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -94,6 +100,7 @@ import com.app.musicplayer.data.SongStats
 import com.app.musicplayer.data.asClock
 import com.app.musicplayer.ui.PlayerUi
 import com.app.musicplayer.ui.PlayerViewModel
+import com.app.musicplayer.audio.ReplayGain
 import kotlin.math.sin
 
 /** Frosted panel: translucent gradient + hairline border, sitting on top of the blurred album-art backdrop. */
@@ -114,9 +121,11 @@ fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
 fun PlayerScreen(vm: PlayerViewModel) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val art by vm.art.collectAsStateWithLifecycle()
+    val accentSecondary by vm.accentSecondary.collectAsStateWithLifecycle()
     val accent = MaterialTheme.colorScheme.primary
     val artImage = remember(art) { art?.asImageBitmap() }
     val song = ui.song
+    var cassetteMode by rememberSaveable { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         // Backdrop: heavily blurred cover (Modifier.blur is a no-op below Android 12; the gradient still works).
@@ -130,7 +139,11 @@ fun PlayerScreen(vm: PlayerViewModel) {
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    listOf(accent.copy(alpha = 0.18f), MaterialTheme.colorScheme.background.copy(alpha = 0.92f))
+                    listOf(
+                        accent.copy(alpha = 0.24f),
+                        accentSecondary.copy(alpha = 0.16f),
+                        MaterialTheme.colorScheme.background.copy(alpha = 0.94f),
+                    )
                 )
             )
         )
@@ -142,7 +155,22 @@ fun PlayerScreen(vm: PlayerViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(12.dp))
-                Vinyl(artImage, ui.isPlaying, vinylSize, accent)
+                Box(contentAlignment = Alignment.BottomCenter) {
+                    Crossfade(targetState = cassetteMode, label = "art-player-mode") { cassette ->
+                        if (cassette) CassetteTape(artImage, ui.isPlaying, vinylSize, accent)
+                        else Vinyl(artImage, ui.isPlaying, vinylSize, accent)
+                    }
+                    Text(
+                        if (cassetteMode) "WALKMAN TAPE" else "VINYL MODE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.72f),
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                }
+                TextButton(onClick = { cassetteMode = !cassetteMode }) {
+                    Icon(if (cassetteMode) Icons.Rounded.Album else Icons.Rounded.MusicNote, null)
+                    Text(if (cassetteMode) " Switch to vinyl" else " Switch to cassette")
+                }
                 Spacer(Modifier.height(24.dp))
 
                 Text(
@@ -250,16 +278,20 @@ private fun PlayerExtras(vm: PlayerViewModel, ui: PlayerUi, accent: Color) {
 }
 
 private val SPEEDS = listOf(0.25f, 0.5f, 1f, 1.25f, 1.5f, 2f, 3f)
+private val PITCHES = listOf(0.5f, 0.75f, 0.9f, 1f, 1.1f, 1.25f, 1.5f, 2f)
 private val SLEEP_MINUTES = listOf(15, 30, 45, 60, 90)
 
 private fun speedText(s: Float): String = if (s == s.toInt().toFloat()) "${s.toInt()}x" else "${s}x"
+private fun pitchText(pitch: Float): String = if (pitch == 1f) "Pitch 0" else "Pitch ${"%.2f".format(pitch)}x"
 
 @Composable
 private fun PlayerTools(vm: PlayerViewModel, ui: PlayerUi, accent: Color) {
     val abA by vm.abA.collectAsStateWithLifecycle()
     val abB by vm.abB.collectAsStateWithLifecycle()
     val sleepLeft by vm.sleepLeftMs.collectAsStateWithLifecycle()
+    val rgMode by vm.rgMode.collectAsStateWithLifecycle()
     var speedMenu by remember { mutableStateOf(false) }
+    var pitchMenu by remember { mutableStateOf(false) }
     var sleepMenu by remember { mutableStateOf(false) }
 
     val abLabel = when {
@@ -269,38 +301,75 @@ private fun PlayerTools(vm: PlayerViewModel, ui: PlayerUi, accent: Color) {
     }
 
     GlassCard(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box {
-                ToolPill(Icons.Rounded.Speed, speedText(ui.speed), ui.speed != 1f, accent) { speedMenu = true }
-                DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
-                    SPEEDS.forEach { sp ->
-                        DropdownMenuItem(
-                            text = { Text(speedText(sp)) },
-                            onClick = { vm.setSpeed(sp); speedMenu = false },
-                        )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box {
+                    ToolPill(Icons.Rounded.Speed, speedText(ui.speed), ui.speed != 1f, accent) { speedMenu = true }
+                    DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
+                        SPEEDS.forEach { sp ->
+                            DropdownMenuItem(
+                                text = { Text(speedText(sp)) },
+                                onClick = { vm.setSpeed(sp); speedMenu = false },
+                            )
+                        }
                     }
                 }
-            }
-            ToolPill(Icons.Rounded.Repeat, abLabel, abA >= 0, accent) { vm.cycleAb() }
-            Box {
-                ToolPill(
-                    Icons.Rounded.Bedtime,
-                    if (sleepLeft > 0) sleepLeft.asClock() else "Sleep",
-                    sleepLeft > 0, accent,
-                ) { sleepMenu = true }
-                DropdownMenu(expanded = sleepMenu, onDismissRequest = { sleepMenu = false }) {
-                    if (sleepLeft > 0) {
-                        DropdownMenuItem(text = { Text("Turn off timer") }, onClick = { vm.setSleepTimer(0); sleepMenu = false })
+                Box {
+                    ToolPill(Icons.Rounded.Tune, pitchText(ui.pitch), ui.pitch != 1f, accent) { pitchMenu = true }
+                    DropdownMenu(expanded = pitchMenu, onDismissRequest = { pitchMenu = false }) {
+                        PITCHES.forEach { pitch ->
+                            DropdownMenuItem(
+                                text = { Text(pitchText(pitch)) },
+                                onClick = { vm.setPitch(pitch); pitchMenu = false },
+                            )
+                        }
                     }
-                    SLEEP_MINUTES.forEach { m ->
-                        DropdownMenuItem(
-                            text = { Text("$m min") },
-                            onClick = { vm.setSleepTimer(m); sleepMenu = false },
-                        )
+                }
+                ToolPill(Icons.Rounded.Repeat, abLabel, abA >= 0, accent) { vm.cycleAb() }
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ToolPill(
+                    Icons.Rounded.VolumeUp,
+                    when (rgMode) {
+                        ReplayGain.MODE_TRACK -> "Track normalize"
+                        ReplayGain.MODE_ALBUM -> "Album normalize"
+                        else -> "Normalizer off"
+                    },
+                    rgMode != ReplayGain.MODE_OFF,
+                    accent,
+                ) {
+                    vm.setRgMode(
+                        when (rgMode) {
+                            ReplayGain.MODE_OFF -> ReplayGain.MODE_TRACK
+                            ReplayGain.MODE_TRACK -> ReplayGain.MODE_ALBUM
+                            else -> ReplayGain.MODE_OFF
+                        }
+                    )
+                }
+                Box {
+                    ToolPill(
+                        Icons.Rounded.Bedtime,
+                        if (sleepLeft > 0) sleepLeft.asClock() else "Sleep",
+                        sleepLeft > 0, accent,
+                    ) { sleepMenu = true }
+                    DropdownMenu(expanded = sleepMenu, onDismissRequest = { sleepMenu = false }) {
+                        if (sleepLeft > 0) {
+                            DropdownMenuItem(text = { Text("Turn off timer") }, onClick = { vm.setSleepTimer(0); sleepMenu = false })
+                        }
+                        SLEEP_MINUTES.forEach { m ->
+                            DropdownMenuItem(
+                                text = { Text("$m min") },
+                                onClick = { vm.setSleepTimer(m); sleepMenu = false },
+                            )
+                        }
                     }
                 }
             }
@@ -371,6 +440,91 @@ private fun Vinyl(art: ImageBitmap?, spinning: Boolean, diameter: Dp, accent: Co
             else Icon(Icons.Rounded.MusicNote, null, tint = Color.White.copy(0.9f), modifier = Modifier.size(48.dp))
         }
         Box(Modifier.size(14.dp).clip(CircleShape).background(disc))
+    }
+}
+
+@Composable
+private fun CassetteTape(art: ImageBitmap?, spinning: Boolean, diameter: Dp, accent: Color) {
+    var reelAngle by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(spinning) {
+        if (spinning) {
+            var last = withFrameNanosCompat()
+            while (true) {
+                val now = withFrameNanosCompat()
+                reelAngle = (reelAngle + (now - last) / 1_000_000_000f * 150f) % 360f
+                last = now
+            }
+        }
+    }
+    Box(
+        Modifier.size(diameter).shadow(28.dp, RoundedCornerShape(28.dp), ambientColor = accent, spotColor = accent),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            drawRoundRect(
+                Brush.linearGradient(listOf(Color(0xFF32343B), Color(0xFF111216))),
+                cornerRadius = CornerRadius(w * 0.09f),
+            )
+            drawRoundRect(
+                Color.White.copy(alpha = 0.08f),
+                topLeft = Offset(w * 0.06f, h * 0.05f),
+                size = Size(w * 0.88f, h * 0.9f),
+                cornerRadius = CornerRadius(w * 0.07f),
+                style = Stroke(width = 1.dp.toPx()),
+            )
+            drawRoundRect(
+                Brush.verticalGradient(listOf(accent.copy(alpha = 0.82f), accent.copy(alpha = 0.28f))),
+                topLeft = Offset(w * 0.16f, h * 0.13f),
+                size = Size(w * 0.68f, h * 0.3f),
+                cornerRadius = CornerRadius(w * 0.035f),
+            )
+            drawRoundRect(
+                Color(0xFF090A0C),
+                topLeft = Offset(w * 0.13f, h * 0.48f),
+                size = Size(w * 0.74f, h * 0.34f),
+                cornerRadius = CornerRadius(w * 0.07f),
+            )
+            val centers = listOf(Offset(w * 0.34f, h * 0.64f), Offset(w * 0.66f, h * 0.64f))
+            val radius = w * 0.115f
+            centers.forEachIndexed { index, center ->
+                drawCircle(Color(0xFF292B31), radius, center)
+                drawCircle(Color.White.copy(alpha = 0.55f), radius, center, style = Stroke(width = 2.dp.toPx()))
+                rotate(if (index == 0) reelAngle else -reelAngle, center) {
+                    for (spoke in 0 until 6) {
+                        val angle = spoke * (Math.PI.toFloat() / 3f)
+                        drawLine(
+                            Color.White.copy(alpha = 0.7f),
+                            Offset(center.x + kotlin.math.cos(angle) * radius * 0.25f, center.y + kotlin.math.sin(angle) * radius * 0.25f),
+                            Offset(center.x + kotlin.math.cos(angle) * radius * 0.76f, center.y + kotlin.math.sin(angle) * radius * 0.76f),
+                            strokeWidth = 2.dp.toPx(),
+                        )
+                    }
+                }
+                drawCircle(Color(0xFF111216), radius * 0.23f, center)
+            }
+            drawRoundRect(
+                Color.White.copy(alpha = 0.35f),
+                topLeft = Offset(w * 0.39f, h * 0.48f),
+                size = Size(w * 0.22f, h * 0.07f),
+                cornerRadius = CornerRadius(w * 0.025f),
+            )
+            drawCircle(accent, w * 0.018f, Offset(w * 0.16f, h * 0.89f))
+            drawCircle(Color.White.copy(alpha = 0.35f), w * 0.018f, Offset(w * 0.84f, h * 0.89f))
+        }
+        if (art != null) {
+            Image(
+                art,
+                contentDescription = "Album artwork",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth(0.35f).fillMaxSize(0.21f).clip(RoundedCornerShape(8.dp))
+                    .align(Alignment.TopCenter).padding(top = diameter * 0.16f),
+            )
+        } else {
+            Icon(Icons.Rounded.MusicNote, null, tint = Color.White, modifier = Modifier.align(Alignment.TopCenter)
+                .padding(top = diameter * 0.2f).size(diameter * 0.12f))
+        }
     }
 }
 

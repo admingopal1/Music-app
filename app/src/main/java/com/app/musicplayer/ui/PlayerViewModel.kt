@@ -17,7 +17,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.palette.graphics.Palette
-import com.app.musicplayer.audio.AudioFxManager
+import com.app.musicplayer.audio.SonyAudioEffects
 import com.app.musicplayer.data.ArtLoader
 import com.app.musicplayer.data.MediaStoreRepository
 import com.app.musicplayer.data.PlaylistStore
@@ -55,12 +55,13 @@ data class PlayerUi(
     val shuffle: Boolean = false,
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val speed: Float = 1f,
+    val pitch: Float = 1f,
 )
 
 class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val ctx = app.applicationContext
-    val fx: AudioFxManager = AudioFxManager.get(ctx)
+    val fx: SonyAudioEffects = SonyAudioEffects.get(ctx)
     val fileTransfer = FileTransferManager(ctx)
     val playlists = PlaylistStore(ctx)
     val stats = StatsStore(ctx)
@@ -76,6 +77,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val art: StateFlow<Bitmap?> = _art.asStateFlow()
     private val _accent = MutableStateFlow(DefaultAccent)
     val accent: StateFlow<Color> = _accent.asStateFlow()
+    private val _accentSecondary = MutableStateFlow(Color(0xFF542C72))
+    val accentSecondary: StateFlow<Color> = _accentSecondary.asStateFlow()
 
     // ---- VLC-style extras: A-B repeat, sleep timer, colour mode
     private val _abA = MutableStateFlow(-1L)
@@ -168,6 +171,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             shuffle = c.shuffleModeEnabled,
             repeatMode = c.repeatMode,
             speed = c.playbackParameters.speed,
+            pitch = c.playbackParameters.pitch,
         )
         if (song?.id != artFor) {
             artFor = song?.id
@@ -183,23 +187,41 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             if (song == null) {
                 _art.value = null
                 _accent.value = baseAccent()
+                _accentSecondary.value = Color(0xFF542C72)
                 return@launch
             }
             val bmp = ArtLoader.load(ctx, song)
             _art.value = bmp
-            _accent.value = if (bmp != null && _dynamic.value) withContext(Dispatchers.Default) { extractAccent(bmp) } else baseAccent()
+            if (bmp != null && _dynamic.value) {
+                val palette = withContext(Dispatchers.Default) { extractPalette(bmp) }
+                _accent.value = palette.first
+                _accentSecondary.value = palette.second
+            } else {
+                _accent.value = baseAccent()
+                _accentSecondary.value = Color(0xFF542C72)
+            }
         }
     }
 
-    private fun extractAccent(bmp: Bitmap): Color {
+    private fun extractPalette(bmp: Bitmap): Pair<Color, Color> {
         val p = Palette.from(bmp).maximumColorCount(16).generate()
-        val rgb = (p.vibrantSwatch ?: p.lightVibrantSwatch ?: p.dominantSwatch ?: p.mutedSwatch)?.rgb
-            ?: return DefaultAccent
-        val hsl = FloatArray(3)
-        ColorUtils.colorToHSL(rgb, hsl)
-        hsl[1] = hsl[1].coerceAtLeast(0.45f)
-        hsl[2] = hsl[2].coerceIn(0.55f, 0.72f) // keep it readable on the dark surface
-        return Color(ColorUtils.HSLToColor(hsl))
+        fun readable(rgb: Int?, fallback: Color): Color {
+            if (rgb == null) return fallback
+            val hsl = FloatArray(3)
+            ColorUtils.colorToHSL(rgb, hsl)
+            hsl[1] = hsl[1].coerceAtLeast(0.45f)
+            hsl[2] = hsl[2].coerceIn(0.48f, 0.72f)
+            return Color(ColorUtils.HSLToColor(hsl))
+        }
+        val primary = readable(
+            (p.vibrantSwatch ?: p.lightVibrantSwatch ?: p.dominantSwatch ?: p.mutedSwatch)?.rgb,
+            DefaultAccent,
+        )
+        val secondary = readable(
+            (p.darkVibrantSwatch ?: p.mutedSwatch ?: p.lightMutedSwatch ?: p.dominantSwatch)?.rgb,
+            Color(0xFF542C72),
+        )
+        return primary to secondary
     }
 
     // ------------------------------------------------------------- library
@@ -281,6 +303,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putInt("accent_idx", i).apply()
         _accentIdx.value = i
         _accent.value = baseAccent()
+        _accentSecondary.value = Color(0xFF542C72)
         artFor = null
         refreshUi()
     }
@@ -403,6 +426,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSpeed(speed: Float) {
         controller?.let { MediaPlayerManager.setPlaybackSpeed(it, speed) }
+        refreshUi()
+    }
+
+    fun setPitch(pitch: Float) {
+        controller?.let { MediaPlayerManager.setPlaybackPitch(it, pitch) }
         refreshUi()
     }
 

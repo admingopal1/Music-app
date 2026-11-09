@@ -15,7 +15,7 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.app.musicplayer.MainActivity
-import com.app.musicplayer.audio.AudioFxManager
+import com.app.musicplayer.audio.SonyAudioEffects
 import com.app.musicplayer.audio.FadeController
 import com.app.musicplayer.audio.ReplayGainController
 import com.app.musicplayer.audio.ReplayGainProcessor
@@ -68,7 +68,7 @@ class MusicService : MediaSessionService() {
         prefs.registerOnSharedPreferenceChangeListener(l)
 
         // Hook DSP effects to the player's audio session (and re-hook if ExoPlayer changes it).
-        val fx = AudioFxManager.get(this)
+        val fx = SonyAudioEffects.get(this)
         player.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 fx.attach(audioSessionId)
@@ -110,7 +110,7 @@ class MusicService : MediaSessionService() {
             release()
         }
         mediaSession = null
-        AudioFxManager.get(this).release()
+        SonyAudioEffects.get(this).release()
         super.onDestroy()
     }
 }
