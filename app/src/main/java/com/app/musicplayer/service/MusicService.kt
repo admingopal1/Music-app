@@ -16,6 +16,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.app.musicplayer.MainActivity
 import com.app.musicplayer.audio.AudioFxManager
+import com.app.musicplayer.audio.FadeController
 import com.app.musicplayer.audio.ReplayGainController
 import com.app.musicplayer.audio.ReplayGainProcessor
 import com.app.musicplayer.widget.WidgetBridge
@@ -25,6 +26,7 @@ class MusicService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private var widgetBridge: WidgetBridge? = null
     private var rgController: ReplayGainController? = null
+    private var fadeController: FadeController? = null
     private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     override fun onCreate() {
@@ -77,6 +79,7 @@ class MusicService : MediaSessionService() {
         // Keeps the home screen widgets in sync with what is playing.
         widgetBridge = WidgetBridge(this, player)
         rgController = ReplayGainController(this, player, rgProcessor)
+        fadeController = FadeController(this, player, rgProcessor)
 
         val openApp = PendingIntent.getActivity(
             this, 0,
@@ -94,6 +97,8 @@ class MusicService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        fadeController?.release()
+        fadeController = null
         rgController?.release()
         rgController = null
         widgetBridge?.release()

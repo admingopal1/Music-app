@@ -89,12 +89,15 @@ class ReplayGainStore(ctx: Context) {
 /** Scales 16-bit / float PCM by a smoothly changing gain (30 ms ramp, so track changes don't click). */
 class ReplayGainProcessor : BaseAudioProcessor() {
     @Volatile private var target = 1f
+    @Volatile private var rg = 1f
+    @Volatile private var fade = 1f
     private var current = 1f
     private var step = 0.001f
     private var channels = 2
     private var encoding = C.ENCODING_INVALID
 
-    fun setGainDb(db: Float) { target = ReplayGain.dbToLinear(db) }
+    fun setGainDb(db: Float) { rg = ReplayGain.dbToLinear(db); target = rg * fade }
+    fun setFade(f: Float) { fade = f.coerceIn(0f, 1f); target = rg * fade }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         val enc = inputAudioFormat.encoding
@@ -200,5 +203,63 @@ class ReplayGainController(
     fun release() {
         player.removeListener(this)
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
+    }
+}
+
+/**
+ * "Fade between songs": fades the end of a song out and the start of the next one in
+ * (a fade-through, not an overlapping crossfade). Uses the same processor as ReplayGain.
+ */
+class FadeController(
+    ctx: Context,
+    private val player: Player,
+    private val processor: ReplayGainProcessor,
+) : Player.Listener {
+    private val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var fadeInActive = false
+    private var lastFade = 1f
+
+    private val tick = object : Runnable {
+        override fun run() {
+            update()
+            handler.postDelayed(this, 100)
+        }
+    }
+
+    init {
+        player.addListener(this)
+        handler.post(tick)
+    }
+
+    override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+        fadeInActive = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO
+        update()
+    }
+
+    private fun update() {
+        val secs = prefs.getFloat("fade_secs", 0f)
+        var f = 1f
+        val d = player.duration
+        if (secs > 0f && d != C.TIME_UNSET && d > 0L) {
+            val p = player.currentPosition
+            val half = min(secs * 500f, d / 4f)          // milliseconds for each half of the fade
+            if (fadeInActive) {
+                if (p >= half) fadeInActive = false else f = min(f, (p / half).coerceIn(0f, 1f))
+            }
+            if (player.hasNextMediaItem() && player.repeatMode != Player.REPEAT_MODE_ONE) {
+                f = min(f, ((d - p) / half).coerceIn(0f, 1f))
+            }
+        }
+        if (f != lastFade) {
+            lastFade = f
+            processor.setFade(f)
+        }
+    }
+
+    fun release() {
+        handler.removeCallbacks(tick)
+        player.removeListener(this)
+        processor.setFade(1f)
     }
 }

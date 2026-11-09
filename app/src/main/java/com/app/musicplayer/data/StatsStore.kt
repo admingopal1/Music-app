@@ -39,6 +39,15 @@ class StatsStore(ctx: Context) {
         _stats.value = _stats.value + (id to s)
     }
 
+    /** Writes many entries at once (used by restore). */
+    fun putAll(entries: Map<Long, SongStats>) {
+        if (entries.isEmpty()) return
+        val e = prefs.edit()
+        for ((id, s) in entries) e.putString(id.toString(), "${if (s.favorite) 1 else 0},${s.rating},${s.plays},${s.lastPlayed}")
+        e.apply()
+        _stats.value = _stats.value + entries
+    }
+
     fun toggleFavorite(id: Long) {
         val s = _stats.value[id] ?: SongStats()
         save(id, s.copy(favorite = !s.favorite))

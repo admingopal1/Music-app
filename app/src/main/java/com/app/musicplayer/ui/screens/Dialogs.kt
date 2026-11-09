@@ -61,6 +61,14 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     val rgPreamp by vm.rgPreamp.collectAsStateWithLifecycle()
     val rgFallback by vm.rgFallback.collectAsStateWithLifecycle()
     val rgLimit by vm.rgLimit.collectAsStateWithLifecycle()
+    val fadeSecs by vm.fadeSecs.collectAsStateWithLifecycle()
+    val backupMsg by vm.backupMessage.collectAsStateWithLifecycle()
+    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) vm.exportBackup(uri)
+    }
+    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importBackup(uri)
+    }
     val treePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) vm.lyricsRepo.setTree(uri)
     }
@@ -89,6 +97,12 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Fade between songs", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { vm.setFadeSecs(fadeSecs - 1f) }) { Text("\u2212") }
+                    Text(if (fadeSecs <= 0f) "Off" else "${fadeSecs.toInt()} s", style = MaterialTheme.typography.labelLarge)
+                    TextButton(onClick = { vm.setFadeSecs(fadeSecs + 1f) }) { Text("+") }
+                }
                 Text("Accent colour", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ACCENT_CHOICES.forEachIndexed { i, c ->
@@ -103,6 +117,14 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                     "Accent colour is used when album-art colours are off.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text("Backup & restore", style = MaterialTheme.typography.labelLarge)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { exportPicker.launch("music-player-backup.json") }) { Text("Backup") }
+                    TextButton(onClick = { importPicker.launch(arrayOf("application/json", "text/plain", "*/*")) }) { Text("Restore") }
+                }
+                backupMsg?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Text("Lyrics folder (.lrc files)", style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { treePicker.launch(null) }) {

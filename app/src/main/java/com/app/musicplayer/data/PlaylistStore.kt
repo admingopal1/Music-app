@@ -21,6 +21,8 @@ class PlaylistStore(context: Context) {
 
     fun delete(name: String) = commit(_lists.value - name)
 
+    fun replaceAll(map: Map<String, List<Long>>) = commit(map)
+
     fun addSong(name: String, songId: Long) {
         val cur = _lists.value[name] ?: return
         if (songId in cur) return

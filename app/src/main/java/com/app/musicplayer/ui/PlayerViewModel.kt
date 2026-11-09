@@ -23,6 +23,7 @@ import com.app.musicplayer.data.MediaStoreRepository
 import com.app.musicplayer.data.PlaylistStore
 import com.app.musicplayer.audio.ReplayGain
 import com.app.musicplayer.audio.ReplayGainStore
+import com.app.musicplayer.data.BackupManager
 import com.app.musicplayer.data.Song
 import com.app.musicplayer.data.StatsStore
 import com.app.musicplayer.lyrics.LyricsRepository
@@ -93,6 +94,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _skipSilence = MutableStateFlow(prefs.getBoolean("skip_silence", false))
     val skipSilence: StateFlow<Boolean> = _skipSilence.asStateFlow()
 
+    private val backup = BackupManager(ctx)
+    private val _backupMsg = MutableStateFlow<String?>(null)
+    val backupMessage: StateFlow<String?> = _backupMsg.asStateFlow()
+    private val _fadeSecs = MutableStateFlow(prefs.getFloat("fade_secs", 0f))
+    val fadeSecs: StateFlow<Float> = _fadeSecs.asStateFlow()
     private val rgStore = ReplayGainStore(ctx)
     private val _rgMode = MutableStateFlow(prefs.getInt("rg_mode", 0))
     val rgMode: StateFlow<Int> = _rgMode.asStateFlow()
@@ -277,6 +283,38 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The playback service listens to this preference and applies it to ExoPlayer. */
+    /** 0 = off. Read by the playback service. */
+    fun setFadeSecs(secs: Float) {
+        val v = secs.coerceIn(0f, 12f)
+        prefs.edit().putFloat("fade_secs", v).apply()
+        _fadeSecs.value = v
+    }
+
+    fun exportBackup(uri: Uri) {
+        viewModelScope.launch {
+            _backupMsg.value = withContext(Dispatchers.IO) {
+                runCatching {
+                    val json = backup.export(_songs.value, playlists.lists.value, stats.stats.value)
+                    ctx.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(json.toByteArray()) }
+                    "Backup saved."
+                }.getOrElse { "Backup failed: ${it.message}" }
+            }
+        }
+    }
+
+    fun importBackup(uri: Uri) {
+        viewModelScope.launch {
+            _backupMsg.value = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = ctx.contentResolver.openInputStream(uri)!!.use { String(it.readBytes()) }
+                    val r = backup.restore(text, _songs.value, playlists, stats)
+                    "Restored ${r.playlists} playlists, ${r.matched} songs matched, ${r.missing} not found on this phone. " +
+                        "Restart the app to apply settings and equalizer."
+                }.getOrElse { "Restore failed: ${it.message}" }
+            }
+        }
+    }
+
     // ReplayGain settings are read by the playback service (same preferences file).
     fun setRgMode(mode: Int) { prefs.edit().putInt("rg_mode", mode).apply(); _rgMode.value = mode }
     fun setRgPreamp(db: Float) {
