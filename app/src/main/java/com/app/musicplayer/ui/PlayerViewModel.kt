@@ -31,6 +31,7 @@ import com.app.musicplayer.data.Video
 import com.app.musicplayer.data.VideoRepository
 import com.app.musicplayer.data.toMediaItem
 import com.app.musicplayer.service.MusicService
+import com.app.musicplayer.playback.MediaPlayerManager
 import com.app.musicplayer.ui.theme.ACCENT_CHOICES
 import com.app.musicplayer.ui.theme.DefaultAccent
 import kotlinx.coroutines.Dispatchers
@@ -399,7 +400,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------- VLC-style extras
 
     fun setSpeed(speed: Float) {
-        controller?.setPlaybackSpeed(speed)
+        controller?.let { MediaPlayerManager.setPlaybackSpeed(it, speed) }
         refreshUi()
     }
 

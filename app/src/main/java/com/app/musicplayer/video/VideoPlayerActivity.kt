@@ -10,16 +10,24 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.media.MediaMetadataRetriever
+import android.util.Log
 import android.util.Rational
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -75,7 +83,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -92,8 +104,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.app.musicplayer.data.asClock
+import com.app.musicplayer.playback.MediaPlayerManager
 import com.app.musicplayer.ui.theme.MusicTheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -142,6 +157,11 @@ class VideoPlayerActivity : ComponentActivity() {
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
+        exo.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                updatePictureInPictureParams()
+            }
+        })
         val items = queue.uris.mapIndexed { i, u ->
             MediaItem.Builder()
                 .setMediaId(u)
@@ -154,6 +174,11 @@ class VideoPlayerActivity : ComponentActivity() {
         exo.prepare()
         exo.playWhenReady = true
         player = exo
+        updatePictureInPictureParams()
+
+        val subtitlePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let(::attachSubtitle)
+        }
 
         setContent {
             MusicTheme {
@@ -162,6 +187,11 @@ class VideoPlayerActivity : ComponentActivity() {
                     player = exo,
                     inPip = inPip,
                     onPip = { enterPip() },
+                    onAddSubtitle = {
+                        subtitlePicker.launch(
+                            arrayOf("application/x-subrip", "text/vtt", "text/x-ssa", "text/plain", "application/octet-stream")
+                        )
+                    },
                     onClose = { finish() },
                 )
             }
@@ -192,9 +222,43 @@ class VideoPlayerActivity : ComponentActivity() {
     private fun enterPip() {
         if (Build.VERSION.SDK_INT >= 26) {
             runCatching {
+                updatePictureInPictureParams()
                 enterPictureInPictureMode(PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9)).build())
             }
         }
+    }
+
+    private fun updatePictureInPictureParams() {
+        if (Build.VERSION.SDK_INT < 26) return
+        val builder = PictureInPictureParams.Builder().setAspectRatio(Rational(16, 9))
+        if (Build.VERSION.SDK_INT >= 31) {
+            builder.setAutoEnterEnabled(player?.isPlaying == true)
+        }
+        setPictureInPictureParams(builder.build())
+    }
+
+    private fun attachSubtitle(uri: Uri) {
+        val subtitle = MediaPlayerManager.subtitleConfiguration(uri)
+        if (subtitle == null) {
+            Toast.makeText(this, "Choose an SRT, VTT, or ASS subtitle file.", Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (e: SecurityException) {
+            Toast.makeText(this, "Could not keep access to the subtitle file: ${e.message}", Toast.LENGTH_LONG).show()
+            return
+        }
+        val p = player
+        val item = p?.currentMediaItem
+        if (p == null || item == null) {
+            Toast.makeText(this, "No video is currently loaded.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        p.replaceMediaItem(
+            p.currentMediaItemIndex,
+            item.buildUpon().setSubtitleConfigurations(listOf(subtitle)).build(),
+        )
     }
 
     override fun onUserLeaveHint() {
@@ -240,7 +304,8 @@ class VideoPlayerActivity : ComponentActivity() {
 
 // ------------------------------------------------------------------ UI
 
-private val VIDEO_SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f, 3f, 4f)
+private val VIDEO_SPEEDS = MediaPlayerManager.playbackSpeeds
+private const val VIDEO_TAG = "VideoPlayer"
 
 private fun speedText(s: Float): String = if (s == s.toInt().toFloat()) "${s.toInt()}x" else "${s}x"
 
@@ -250,8 +315,10 @@ private fun VideoScreen(
     player: ExoPlayer,
     inPip: Boolean,
     onPip: () -> Unit,
+    onAddSubtitle: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val context = LocalContext.current
     var title by remember { mutableStateOf(player.currentMediaItem?.mediaMetadata?.title?.toString().orEmpty()) }
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
     var tracks by remember { mutableStateOf(player.currentTracks) }
@@ -268,9 +335,13 @@ private fun VideoScreen(
     var tracksMenu by remember { mutableStateOf(false) }
     var scrubbing by remember { mutableStateOf(false) }
     var scrubValue by remember { mutableFloatStateOf(0f) }
+    var previewFrame by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
     var zoom by remember { mutableFloatStateOf(1f) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
+    var seekRippleTrigger by remember { mutableIntStateOf(0) }
+    var seekRippleLeft by remember { mutableStateOf(false) }
+    val seekRippleProgress = remember { Animatable(1f) }
 
     val audio = remember { activity.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
     val maxVol = remember { audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
@@ -298,7 +369,22 @@ private fun VideoScreen(
             delay(250)
         }
     }
+    LaunchedEffect(player.currentMediaItem?.mediaId, scrubbing, scrubValue, durMs) {
+        if (!scrubbing || durMs <= 0L) {
+            previewFrame = null
+            return@LaunchedEffect
+        }
+        delay(180)
+        val uri = player.currentMediaItem?.localConfiguration?.uri ?: return@LaunchedEffect
+        previewFrame = loadVideoFrame(context, uri, (scrubValue * durMs).toLong())
+    }
     LaunchedEffect(hud) { if (hud != null) { delay(900); hud = null } }
+    LaunchedEffect(seekRippleTrigger) {
+        if (seekRippleTrigger > 0) {
+            seekRippleProgress.snapTo(0f)
+            seekRippleProgress.animateTo(1f, tween(550))
+        }
+    }
     LaunchedEffect(controls, isPlaying, speedMenu, tracksMenu, locked) {
         if (controls && isPlaying && !speedMenu && !tracksMenu) { delay(3500); controls = false }
     }
@@ -337,11 +423,15 @@ private fun VideoScreen(
                     } else {
                         detectTapGestures(
                             onTap = { controls = !controls },
-                            onDoubleTap = { o -> seekBy(if (o.x < size.width / 2f) -10_000L else 10_000L) },
-                            onLongPress = { boosted = true; player.setPlaybackSpeed(2f); hud = "2x" },
+                            onDoubleTap = { o ->
+                                seekRippleLeft = o.x < size.width / 2f
+                                seekRippleTrigger++
+                                seekBy(if (seekRippleLeft) -10_000L else 10_000L)
+                            },
+                            onLongPress = { boosted = true; MediaPlayerManager.setPlaybackSpeed(player, 2f); hud = "2x" },
                             onPress = {
                                 tryAwaitRelease()
-                                if (boosted) { boosted = false; player.setPlaybackSpeed(speed) }
+                                if (boosted) { boosted = false; MediaPlayerManager.setPlaybackSpeed(player, speed) }
                             },
                         )
                     }
@@ -402,6 +492,30 @@ private fun VideoScreen(
                 }
         )
 
+        if (seekRippleTrigger > 0) {
+            Box(
+                Modifier.align(if (seekRippleLeft) Alignment.CenterStart else Alignment.CenterEnd)
+                    .padding(horizontal = 32.dp)
+                    .size(104.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val progress = seekRippleProgress.value
+                    drawCircle(
+                        Color.White.copy(alpha = 0.45f * (1f - progress)),
+                        radius = size.minDimension * (0.18f + 0.42f * progress),
+                        style = Stroke(width = 3.dp.toPx()),
+                    )
+                }
+                Icon(
+                    if (seekRippleLeft) Icons.Rounded.Replay10 else Icons.Rounded.Forward10,
+                    contentDescription = if (seekRippleLeft) "Rewind 10 seconds" else "Forward 10 seconds",
+                    tint = Color.White.copy(alpha = 1f - seekRippleProgress.value * 0.5f),
+                    modifier = Modifier.size(42.dp),
+                )
+            }
+        }
+
         // ---- HUD message
         AnimatedVisibility(
             visible = hud != null,
@@ -450,7 +564,7 @@ private fun VideoScreen(
                     )
                     Box {
                         IconButton(onClick = { tracksMenu = true }) { Icon(Icons.Rounded.Audiotrack, "Audio and subtitles", tint = Color.White) }
-                        TracksMenu(tracksMenu, tracks, player) { tracksMenu = false }
+                        TracksMenu(tracksMenu, tracks, player, onAddSubtitle) { tracksMenu = false }
                     }
                     Box {
                         IconButton(onClick = { speedMenu = true }) {
@@ -465,7 +579,7 @@ private fun VideoScreen(
                                             color = if (s == speed) MaterialTheme.colorScheme.primary else Color.Unspecified,
                                         )
                                     },
-                                    onClick = { speed = s; player.setPlaybackSpeed(s); speedMenu = false },
+                                    onClick = { speed = s; MediaPlayerManager.setPlaybackSpeed(player, s); speedMenu = false },
                                 )
                             }
                         }
@@ -507,6 +621,17 @@ private fun VideoScreen(
                         .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.8f))))
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
+                    if (scrubbing) previewFrame?.let { frame ->
+                        Image(
+                            bitmap = frame.asImageBitmap(),
+                            contentDescription = "Seek preview",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                                .padding(bottom = 6.dp)
+                                .size(width = 128.dp, height = 72.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                        )
+                    }
                     val shown = if (scrubbing) scrubValue else if (durMs > 0) (posMs.toFloat() / durMs).coerceIn(0f, 1f) else 0f
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -566,6 +691,23 @@ private fun VideoScreen(
 
 // ------------------------------------------------------------------ audio / subtitle tracks
 
+private suspend fun loadVideoFrame(context: Context, uri: Uri, positionMs: Long): android.graphics.Bitmap? =
+    withContext(Dispatchers.IO) {
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(context, uri)
+            retriever.getFrameAtTime(
+                positionMs.coerceAtLeast(0L) * 1_000L,
+                MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+            )
+        } catch (e: Exception) {
+            Log.w(VIDEO_TAG, "Could not load a seek-preview frame for $uri", e)
+            null
+        } finally {
+            retriever.release()
+        }
+    }
+
 private data class TrackOpt(val group: Tracks.Group, val index: Int, val label: String, val selected: Boolean)
 
 private fun trackOptions(tracks: Tracks, type: Int): List<TrackOpt> {
@@ -575,9 +717,13 @@ private fun trackOptions(tracks: Tracks, type: Int): List<TrackOpt> {
         for (i in 0 until g.length) {
             if (!g.isTrackSupported(i)) continue
             val f = g.getTrackFormat(i)
-            val name = f.label
-                ?: f.language?.let { Locale(it).displayLanguage }?.takeIf { it.isNotBlank() }
-                ?: "Track ${out.size + 1}"
+            val name = when {
+                type == C.TRACK_TYPE_VIDEO && f.height > 0 -> "${f.height}p"
+                type == C.TRACK_TYPE_VIDEO && f.width > 0 -> "${f.width} px"
+                else -> f.label
+                    ?: f.language?.let { Locale(it).displayLanguage }?.takeIf { it.isNotBlank() }
+                    ?: "Track ${out.size + 1}"
+            }
             out += TrackOpt(g, i, name, g.isTrackSelected(i))
         }
     }
@@ -597,12 +743,40 @@ private fun disableSubtitles(p: Player) {
         .build()
 }
 
+private fun automaticVideoQuality(p: Player) {
+    p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+        .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false)
+        .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+        .build()
+}
+
 @Composable
-private fun TracksMenu(expanded: Boolean, tracks: Tracks, player: Player, onDismiss: () -> Unit) {
+private fun TracksMenu(
+    expanded: Boolean,
+    tracks: Tracks,
+    player: Player,
+    onAddSubtitle: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val audioOpts = trackOptions(tracks, C.TRACK_TYPE_AUDIO)
     val subOpts = trackOptions(tracks, C.TRACK_TYPE_TEXT)
+    val videoOpts = trackOptions(tracks, C.TRACK_TYPE_VIDEO)
     val check = "  \u2713"
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        Text(
+            "Video quality", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+        DropdownMenuItem(
+            text = { Text("Automatic" + if (videoOpts.none { it.selected }) check else "") },
+            onClick = { automaticVideoQuality(player); onDismiss() },
+        )
+        videoOpts.forEach { o ->
+            DropdownMenuItem(
+                text = { Text(o.label + if (o.selected) check else "") },
+                onClick = { selectTrack(player, o); onDismiss() },
+            )
+        }
         Text(
             "Audio", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -630,5 +804,9 @@ private fun TracksMenu(expanded: Boolean, tracks: Tracks, player: Player, onDism
                 onClick = { selectTrack(player, o); onDismiss() },
             )
         }
+        DropdownMenuItem(
+            text = { Text("Add subtitle file…") },
+            onClick = { onDismiss(); onAddSubtitle() },
+        )
     }
 }

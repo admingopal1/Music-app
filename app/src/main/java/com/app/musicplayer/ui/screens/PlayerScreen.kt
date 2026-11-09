@@ -111,7 +111,7 @@ fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
 }
 
 @Composable
-fun MainPlayerScreen(vm: PlayerViewModel) {
+fun PlayerScreen(vm: PlayerViewModel) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val art by vm.art.collectAsStateWithLifecycle()
     val accent = MaterialTheme.colorScheme.primary
@@ -249,7 +249,7 @@ private fun PlayerExtras(vm: PlayerViewModel, ui: PlayerUi, accent: Color) {
     if (showLyrics) LyricsDialog(vm) { showLyrics = false }
 }
 
-private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f, 4f)
+private val SPEEDS = listOf(0.25f, 0.5f, 1f, 1.25f, 1.5f, 2f, 3f)
 private val SLEEP_MINUTES = listOf(15, 30, 45, 60, 90)
 
 private fun speedText(s: Float): String = if (s == s.toInt().toFloat()) "${s.toInt()}x" else "${s}x"

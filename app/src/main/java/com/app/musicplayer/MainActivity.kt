@@ -48,7 +48,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.app.musicplayer.ui.PlayerViewModel
 import com.app.musicplayer.ui.screens.EqualizerScreen
 import com.app.musicplayer.ui.screens.LibraryScreen
-import com.app.musicplayer.ui.screens.MainPlayerScreen
+import com.app.musicplayer.ui.screens.PlayerScreen
 import com.app.musicplayer.ui.screens.MiniPlayer
 import com.app.musicplayer.ui.screens.PlaylistsScreen
 import com.app.musicplayer.ui.screens.VideosScreen
@@ -122,7 +122,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                 ) { t ->
                     when (t) {
                         0 -> LibraryScreen(vm, onOpenPlayer = { tab = 1 })
-                        1 -> MainPlayerScreen(vm)
+                        1 -> PlayerScreen(vm)
                         2 -> EqualizerScreen(vm.fx)
                         3 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 1 })
                         else -> VideosScreen(vm)
