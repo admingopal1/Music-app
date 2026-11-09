@@ -23,6 +23,7 @@ import com.app.musicplayer.data.MediaStoreRepository
 import com.app.musicplayer.data.PlaylistStore
 import com.app.musicplayer.data.Song
 import com.app.musicplayer.data.StatsStore
+import com.app.musicplayer.lyrics.LyricsRepository
 import com.app.musicplayer.data.Video
 import com.app.musicplayer.data.VideoRepository
 import com.app.musicplayer.data.toMediaItem
@@ -57,6 +58,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val fx: AudioFxManager = AudioFxManager.get(ctx)
     val playlists = PlaylistStore(ctx)
     val stats = StatsStore(ctx)
+    val lyricsRepo = LyricsRepository(ctx)
 
     private val _songs = MutableStateFlow<List<Song>>(emptyList())
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
@@ -191,6 +193,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun songById(id: Long): Song? = songById[id]
+
+    fun importLyrics(songId: Long, uri: Uri, done: () -> Unit) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { runCatching { lyricsRepo.importFor(songId, uri) } }
+            done()
+        }
+    }
 
     fun loadVideos() {
         viewModelScope.launch { _videos.value = VideoRepository.loadVideos(ctx) }

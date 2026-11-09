@@ -15,6 +15,7 @@ data class Song(
     val uri: Uri,
     val folder: String = "",
     val dateAdded: Long = 0L,
+    val fileName: String = "",
 ) {
     val albumArtUri: Uri
         get() = ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId)

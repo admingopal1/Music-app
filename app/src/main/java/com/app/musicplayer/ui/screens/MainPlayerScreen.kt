@@ -40,6 +40,7 @@ import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
@@ -203,6 +204,7 @@ private fun PlayerExtras(vm: PlayerViewModel, ui: PlayerUi, accent: Color) {
     val st = song?.let { stats[it.id] } ?: SongStats()
     val real = song != null && song.id >= 0     // streams have no stats
     var showQueue by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
 
     GlassCard(Modifier.fillMaxWidth()) {
         Row(
@@ -225,12 +227,18 @@ private fun PlayerExtras(vm: PlayerViewModel, ui: PlayerUi, accent: Color) {
                     )
                 }
             }
-            IconButton(onClick = { showQueue = true }) {
-                Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Queue", tint = Color.White.copy(0.85f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { showLyrics = true }) {
+                    Icon(Icons.Rounded.Subtitles, "Lyrics", tint = Color.White.copy(0.85f))
+                }
+                IconButton(onClick = { showQueue = true }) {
+                    Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Queue", tint = Color.White.copy(0.85f))
+                }
             }
         }
     }
     if (showQueue) QueueDialog(vm) { showQueue = false }
+    if (showLyrics) LyricsDialog(vm) { showLyrics = false }
 }
 
 private val SPEEDS = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f, 4f)

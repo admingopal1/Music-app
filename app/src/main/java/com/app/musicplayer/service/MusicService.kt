@@ -11,10 +11,12 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.app.musicplayer.MainActivity
 import com.app.musicplayer.audio.AudioFxManager
+import com.app.musicplayer.widget.WidgetBridge
 
 class MusicService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
+    private var widgetBridge: WidgetBridge? = null
     private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
 
     override fun onCreate() {
@@ -50,6 +52,9 @@ class MusicService : MediaSessionService() {
         })
         fx.attach(player.audioSessionId)
 
+        // Keeps the home screen widgets in sync with what is playing.
+        widgetBridge = WidgetBridge(this, player)
+
         val openApp = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -66,6 +71,8 @@ class MusicService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        widgetBridge?.release()
+        widgetBridge = null
         prefsListener?.let { getSharedPreferences("settings", MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(it) }
         prefsListener = null
         mediaSession?.run {

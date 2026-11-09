@@ -1,0 +1,4 @@
+<resources>
+    <string name="widget_small_desc">Compact player controls (4x1)</string>
+    <string name="widget_large_desc">Player with artwork and controls (4x2)</string>
+</resources>

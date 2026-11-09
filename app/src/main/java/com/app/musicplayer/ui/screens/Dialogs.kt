@@ -1,5 +1,8 @@
 package com.app.musicplayer.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,6 +14,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Box
@@ -50,13 +55,17 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     val dynamic by vm.dynamicColors.collectAsStateWithLifecycle()
     val skip by vm.skipSilence.collectAsStateWithLifecycle()
     val accentIdx by vm.accentIdx.collectAsStateWithLifecycle()
+    val lyricsFolder by vm.lyricsRepo.folder.collectAsStateWithLifecycle()
+    val treePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) vm.lyricsRepo.setTree(uri)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings") },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 SettingSwitch("AMOLED black theme", amoled, vm::setAmoled)
                 SettingSwitch("Colours from album art", dynamic, vm::setDynamicColors)
                 SettingSwitch("Skip silence", skip, vm::setSkipSilence)
@@ -74,6 +83,22 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                     "Accent colour is used when album-art colours are off.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Text("Lyrics folder (.lrc files)", style = MaterialTheme.typography.labelLarge)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { treePicker.launch(null) }) {
+                        Text(if (lyricsFolder == null) "Choose folder" else "Change folder")
+                    }
+                    if (lyricsFolder != null) {
+                        TextButton(onClick = { vm.lyricsRepo.setTree(null) }) { Text("Clear") }
+                    }
+                }
+                lyricsFolder?.let {
+                    Text(
+                        Uri.parse(it).lastPathSegment.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         },
     )

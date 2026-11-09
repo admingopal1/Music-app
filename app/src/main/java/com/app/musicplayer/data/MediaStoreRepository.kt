@@ -28,6 +28,7 @@ object MediaStoreRepository {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.DATE_ADDED,
+            MediaStore.Audio.Media.DISPLAY_NAME,
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= 30000"
         val order = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
@@ -43,6 +44,7 @@ object MediaStoreRepository {
                 val iDur = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val iData = c.getColumnIndex(MediaStore.Audio.Media.DATA)
                 val iAdded = c.getColumnIndex(MediaStore.Audio.Media.DATE_ADDED)
+                val iFile = c.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
                 while (c.moveToNext()) {
                     val id = c.getLong(iId)
                     val artist = c.getString(iArtist)?.takeUnless { it == "<unknown>" } ?: "Unknown artist"
@@ -54,6 +56,7 @@ object MediaStoreRepository {
                         albumId = c.getLong(iAlbumId),
                         durationMs = c.getLong(iDur),
                         uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
+                        fileName = if (iFile >= 0) c.getString(iFile).orEmpty() else "",
                         dateAdded = if (iAdded >= 0) c.getLong(iAdded) else 0L,
                         folder = if (iData >= 0) c.getString(iData)?.substringBeforeLast('/', "").orEmpty() else "",
                     )
