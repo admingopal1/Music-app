@@ -190,7 +190,7 @@ fun ShareScreen(vm: PlayerViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 BigAction(
                     "Send", "Pick files", Icons.Rounded.Upload,
-                    listOf(Color(0xFFFF8800), Color(0xFFFF5E3A)), Modifier.weight(1f),
+                    listOf(Color(0xFF9656E8), Color(0xFF6639B5)), Modifier.weight(1f),
                 ) { pick("*/*") }
                 if (ui.sessionRunning) {
                     BigAction(
@@ -200,7 +200,7 @@ fun ShareScreen(vm: PlayerViewModel) {
                 } else {
                     BigAction(
                         "Receive", "Show QR and PIN", Icons.Rounded.Download,
-                        listOf(Color(0xFF00BFA5), Color(0xFF0097A7)), Modifier.weight(1f),
+                        listOf(Color(0xFFB04CE8), Color(0xFF7543C6)), Modifier.weight(1f),
                     ) { share.startSession() }
                 }
             }
@@ -423,7 +423,7 @@ private fun CategoryChip(icon: ImageVector, label: String, onClick: () -> Unit) 
 private fun ToolTile(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     Column(
-        modifier.clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+        modifier.clip(RoundedCornerShape(18.dp)).background(Color(0xFF2A2041).copy(alpha = 0.9f))
             .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp))
             .clickable(onClick = onClick).padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -438,7 +438,7 @@ private fun ToolTile(icon: ImageVector, label: String, modifier: Modifier, onCli
 private fun ShareCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .background(Color(0xFF29203F).copy(alpha = 0.92f))
             .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(22.dp))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
