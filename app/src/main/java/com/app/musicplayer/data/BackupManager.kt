@@ -65,8 +65,10 @@ class BackupManager(private val ctx: Context) {
     }
 
     fun restore(json: String, songs: List<Song>, playlistStore: PlaylistStore, statsStore: StatsStore): RestoreResult {
-        val root = JSONObject(json)
-        require(root.optString("app") == "com.app.musicplayer") { "Not a Music Player backup" }
+        require(json.length <= MAX_BACKUP_CHARS) { "Backup is too large to restore safely." }
+        val root = runCatching { JSONObject(json) }
+            .getOrElse { throw IllegalArgumentException("Backup JSON is damaged or incomplete.", it) }
+        validateBackup(root)
 
         // library index: title|artist -> songs
         val index = HashMap<String, MutableList<Song>>()
@@ -137,6 +139,80 @@ class BackupManager(private val ctx: Context) {
         return RestoreResult(plCount, map.size, missing)
     }
 
+    /**
+     * Validate the complete document before changing playlists, stats, lyrics or preferences.
+     * This prevents a truncated/corrupt file from leaving a half-restored library.
+     */
+    private fun validateBackup(root: JSONObject) {
+        require(root.optString("app") == "com.app.musicplayer") { "Not a Music Player backup" }
+        val version = root.optInt("version", 1)
+        require(version in 1..2) { "This backup version is not supported." }
+
+        val songs = root.optJSONObject("songs")
+            ?: throw IllegalArgumentException("Backup is missing its song index.")
+        for (key in songs.keys()) {
+            require(key.toLongOrNull() != null) { "Backup contains an invalid song ID." }
+            val song = songs.optJSONObject(key)
+                ?: throw IllegalArgumentException("Backup contains an invalid song record.")
+            require(song.has("t") && song.has("a") && song.has("d")) {
+                "Backup contains an incomplete song record."
+            }
+            require(song.optLong("d", -1L) >= 0L) { "Backup contains an invalid song duration." }
+        }
+
+        val playlists = root.optJSONObject("playlists")
+            ?: throw IllegalArgumentException("Backup is missing playlists.")
+        for (name in playlists.keys()) {
+            require(name.isNotBlank()) { "Backup contains an empty playlist name." }
+            val items = playlists.optJSONArray(name)
+                ?: throw IllegalArgumentException("Backup contains an invalid playlist.")
+            for (i in 0 until items.length()) {
+                require(items.optLong(i, Long.MIN_VALUE) != Long.MIN_VALUE) {
+                    "Backup contains an invalid playlist song reference."
+                }
+            }
+        }
+
+        val stats = root.optJSONObject("stats")
+            ?: throw IllegalArgumentException("Backup is missing song statistics.")
+        for (key in stats.keys()) {
+            require(key.toLongOrNull() != null) { "Backup contains an invalid statistics ID." }
+            val fields = stats.optString(key, "").split(',')
+            require(fields.size in 4..5 &&
+                fields[0] in setOf("0", "1") &&
+                fields[1].toIntOrNull() in 0..5 &&
+                fields[2].toIntOrNull()?.let { it >= 0 } == true &&
+                fields[3].toLongOrNull()?.let { it >= 0L } == true &&
+                (fields.size == 4 || fields[4].toLongOrNull()?.let { it >= 0L } == true)
+            ) { "Backup contains invalid song statistics." }
+        }
+
+        val lyrics = root.optJSONObject("lyrics")
+            ?: throw IllegalArgumentException("Backup is missing lyrics data.")
+        for (key in lyrics.keys()) {
+            require(key.toLongOrNull() != null && lyrics.opt(key) is String) {
+                "Backup contains invalid lyrics data."
+            }
+        }
+
+        val prefs = root.optJSONObject("prefs")
+            ?: throw IllegalArgumentException("Backup is missing settings.")
+        for (name in prefFiles) {
+            val entries = prefs.optJSONObject(name) ?: continue
+            for (key in entries.keys()) {
+                val entry = entries.optJSONObject(key)
+                    ?: throw IllegalArgumentException("Backup contains an invalid setting.")
+                when (entry.optString("t")) {
+                    "b" -> entry.getBoolean("v")
+                    "i" -> entry.getInt("v")
+                    "l" -> entry.getLong("v")
+                    "f" -> require(entry.getDouble("v").isFinite()) { "Backup contains an invalid setting value." }
+                    "s" -> entry.getString("v")
+                }
+            }
+        }
+    }
+
     private fun dumpPrefs(p: SharedPreferences): JSONObject {
         val out = JSONObject()
         for ((k, v) in p.all) {
@@ -171,4 +247,9 @@ class BackupManager(private val ctx: Context) {
     }
 
     private fun norm(s: String) = s.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+
+
+    private companion object {
+        const val MAX_BACKUP_CHARS = 5 * 1024 * 1024
+    }
 }
