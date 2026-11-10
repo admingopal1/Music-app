@@ -18,6 +18,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.palette.graphics.Palette
 import com.app.musicplayer.audio.SonyAudioEffects
+import com.app.musicplayer.audio.AudioLevelMonitor
 import com.app.musicplayer.data.ArtLoader
 import com.app.musicplayer.data.MediaStoreRepository
 import com.app.musicplayer.data.PlaylistStore
@@ -71,6 +72,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val ctx = app.applicationContext
     val fx: SonyAudioEffects = SonyAudioEffects.get(ctx)
+    val audioLevels = AudioLevelMonitor.levels
     val share = ShareManager.get(ctx)
     val playlists = PlaylistStore(ctx)
     val stats = StatsStore(ctx)
