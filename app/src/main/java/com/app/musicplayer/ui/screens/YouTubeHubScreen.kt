@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBack
@@ -115,7 +114,6 @@ fun YouTubeHubScreen() {
                         override fun onPageFinished(view: WebView, url: String) {
                             currentUrl = url
                             pageTitle = view.title?.take(36) ?: "YouTube"
-                            val decoded = android.net.Uri.decode(url)
                             if (url.contains("/results?") && searchText.isBlank()) {
                                 searchText = android.net.Uri.parse(url).getQueryParameter("search_query").orEmpty()
                             }
