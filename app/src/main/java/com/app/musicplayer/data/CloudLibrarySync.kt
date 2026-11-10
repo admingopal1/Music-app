@@ -69,24 +69,28 @@ class CloudLibrarySync(
             val newRating = (fresh["rating"] as? Number)?.toInt() ?: 0
             mergedStats[key] = mapOf(
                 "track" to track,
-                "favorite" to ((old["favorite"] as? Boolean) == true || (fresh["favorite"] as? Boolean) == true),
-                "rating" to if (newRating > 0) newRating else oldRating,
+                "favorite" to if (fresh.containsKey("favorite")) ((fresh["favorite"] as? Boolean) == true) else ((old["favorite"] as? Boolean) == true),
+                "rating" to if (fresh.containsKey("rating")) newRating else oldRating,
                 "plays" to maxOf((old["plays"] as? Number)?.toInt() ?: 0, (fresh["plays"] as? Number)?.toInt() ?: 0),
                 "lastPlayed" to maxOf((old["lastPlayed"] as? Number)?.toLong() ?: 0L, (fresh["lastPlayed"] as? Number)?.toLong() ?: 0L),
             )
         }
 
-        require(mergedLists.values.sumOf { it.size } <= 4000 && mergedStats.size <= 4000) {
-            "Library is too large for one free-tier sync document. Use local backup for a full archive."
+        val payload = mapOf(
+            "schemaVersion" to 1,
+            "playlists" to mergedLists,
+            "stats" to mergedStats,
+            "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+        )
+        // Firestore documents are limited to 1 MiB. Keep a safety margin and fail
+        // before writing rather than risking a rejected sync.
+        val estimatedBytes = org.json.JSONObject(payload).toString().toByteArray(Charsets.UTF_8).size
+        require(estimatedBytes <= 700_000) {
+            "Cloud library is too large for the safe Firestore document limit. Use local Backup/Restore for the full library."
         }
 
         libraryDoc.set(
-            mapOf(
-                "schemaVersion" to 1,
-                "playlists" to mergedLists,
-                "stats" to mergedStats,
-                "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-            ),
+            payload,
             SetOptions.merge(),
         ).await()
 
@@ -109,8 +113,8 @@ class CloudLibrarySync(
             val current = stats.stats.value[song.id] ?: SongStats()
             val rating = (value["rating"] as? Number)?.toInt() ?: current.rating
             updates[song.id] = SongStats(
-                favorite = current.favorite || value["favorite"] == true,
-                rating = if (rating > 0) rating else current.rating,
+                favorite = (value["favorite"] as? Boolean) ?: current.favorite,
+                rating = rating.coerceIn(0, 5),
                 plays = maxOf(current.plays, (value["plays"] as? Number)?.toInt() ?: 0),
                 lastPlayed = maxOf(current.lastPlayed, (value["lastPlayed"] as? Number)?.toLong() ?: 0L),
             )
