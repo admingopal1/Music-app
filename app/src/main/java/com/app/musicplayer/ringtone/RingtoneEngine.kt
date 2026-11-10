@@ -32,8 +32,8 @@ object RingtoneEngine {
     const val FRAME_MS = 100
     private val BAND_HZ = doubleArrayOf(80.0, 250.0, 700.0, 2000.0, 5000.0, 10000.0)
 
-    /** Decodes the song once and returns per-100 ms loudness and band energies. */
-    fun analyse(ctx: Context, uri: Uri, onProgress: (Float) -> Unit = {}): SongAnalysis {
+    /** Decodes the song once and returns per-100 ms loudness and band energies. Stops early once [keepGoing] is false. */
+    fun analyse(ctx: Context, uri: Uri, keepGoing: () -> Boolean = { true }, onProgress: (Float) -> Unit = {}): SongAnalysis {
         val rms = ArrayList<Float>()
         val bands = ArrayList<FloatArray>()
         var filters: Array<Biquad>? = null
@@ -62,7 +62,7 @@ object RingtoneEngine {
                     }
                 }
                 if (durationUs > 0) onProgress((ptsUs.toFloat() / durationUs).coerceIn(0f, 1f))
-                true
+                keepGoing()
             }
         }
         val dur = if (durationUs > 0) durationUs / 1000 else rms.size.toLong() * FRAME_MS

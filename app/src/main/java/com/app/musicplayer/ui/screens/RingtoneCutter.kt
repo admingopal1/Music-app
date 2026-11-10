@@ -73,6 +73,7 @@ import com.app.musicplayer.ringtone.RingtoneEngine
 import com.app.musicplayer.ringtone.SongAnalysis
 import com.app.musicplayer.ringtone.ToneType
 import com.app.musicplayer.ui.PlayerViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -126,10 +127,12 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
     LaunchedEffect(song.id) {
         try {
             val a = withContext(Dispatchers.Default) {
-                RingtoneEngine.analyse(ctx, song.uri) { p -> progress = p }
+                RingtoneEngine.analyse(ctx, song.uri, keepGoing = { isActive }) { p -> progress = p }
             }
             analysis = a
             aiPick(a, clipSec)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             error = "Couldn't analyse this song (${e.message ?: e.javaClass.simpleName}). You can still trim it manually."
         }
