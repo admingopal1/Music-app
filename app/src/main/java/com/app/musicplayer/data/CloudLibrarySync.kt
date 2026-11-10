@@ -127,7 +127,8 @@ class CloudLibrarySync(
 
         // Merge remote entries back into this device, matching by track metadata.
         val index = songs.groupBy { trackKey(it) }
-        val restoredLists = LinkedHashMap<String, List<Long>>(playlists.lists.value)
+        val restoredLists = LinkedHashMap<String, List<Long>>()
+        mergedLists.keys.forEach { name -> restoredLists[name] = playlists.lists.value[name].orEmpty() }
         mergedLists.forEach { (name, tracks) ->
             val ids = tracks.mapNotNull { track ->
                 val key = track["key"] as? String ?: return@mapNotNull null
