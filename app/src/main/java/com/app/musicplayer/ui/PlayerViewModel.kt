@@ -59,6 +59,16 @@ data class PlayerUi(
     val pitch: Float = 1f,
 )
 
+data class HubDownloadItem(
+    val id: Long,
+    val title: String,
+    val source: String,
+    val quality: String,
+    val size: String,
+    val progress: Int,
+    val status: String,
+)
+
 class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val ctx = app.applicationContext
@@ -72,6 +82,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
     private val _videos = MutableStateFlow<List<Video>>(emptyList())
     val videos: StateFlow<List<Video>> = _videos.asStateFlow()
+    private val _hubItems = MutableStateFlow<List<HubDownloadItem>>(emptyList())
+    val hubItems: StateFlow<List<HubDownloadItem>> = _hubItems.asStateFlow()
     private val _ui = MutableStateFlow(PlayerUi())
     val ui: StateFlow<PlayerUi> = _ui.asStateFlow()
     private val _art = MutableStateFlow<Bitmap?>(null)
@@ -80,6 +92,27 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val accent: StateFlow<Color> = _accent.asStateFlow()
     private val _accentSecondary = MutableStateFlow(Color(0xFF542C72))
     val accentSecondary: StateFlow<Color> = _accentSecondary.asStateFlow()
+
+    fun enqueueDownloadFromUrl(url: String) {
+        if (url.isBlank()) return
+        val safe = url.trim()
+        val item = HubDownloadItem(
+            id = System.currentTimeMillis(),
+            title = safe.substringAfterLast('/').substringBefore('?').ifBlank { "Video" },
+            source = "URL",
+            quality = "1080p",
+            size = "--",
+            progress = 0,
+            status = "Queued",
+        )
+        _hubItems.update { listOf(item) + it }
+    }
+
+    fun updateDownloadStatus(id: Long, progress: Int, status: String) {
+        _hubItems.update { current ->
+            current.map { if (it.id == id) it.copy(progress = progress.coerceIn(0, 100), status = status) else it }
+        }
+    }
 
     // ---- VLC-style extras: A-B repeat, sleep timer, colour mode
     private val _abA = MutableStateFlow(-1L)
@@ -146,8 +179,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
-
-    // ------------------------------------------------------------- connection
 
     private fun connect() {
         val token = SessionToken(ctx, ComponentName(ctx, MusicService::class.java))
@@ -227,8 +258,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         return primary to secondary
     }
 
-    // ------------------------------------------------------------- library
-
     fun loadLibrary() {
         viewModelScope.launch {
             val list = MediaStoreRepository.loadSongs(ctx)
@@ -250,8 +279,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun loadVideos() {
         viewModelScope.launch { _videos.value = VideoRepository.loadVideos(ctx) }
     }
-
-    // ------------------------------------------------------------- playback
 
     fun playSongs(list: List<Song>, index: Int) {
         val c = controller ?: return
@@ -293,8 +320,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ------------------------------------------------------------- settings / queue / streams
-
     private fun baseAccent(): Color = ACCENT_CHOICES[_accentIdx.value.coerceIn(0, ACCENT_CHOICES.lastIndex)]
 
     fun setAmoled(enabled: Boolean) {
@@ -311,13 +336,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         refreshUi()
     }
 
-    /** The playback service listens to this preference and applies it to ExoPlayer. */
     fun setEnhancer(s: EnhancerSettings) {
         s.write(prefs)
         _enhancer.value = s
     }
 
-    /** 0 = off. Read by the playback service. */
     fun setFadeSecs(secs: Float) {
         val v = secs.coerceIn(0f, 12f)
         prefs.edit().putFloat("fade_secs", v).apply()
@@ -342,14 +365,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 runCatching {
                     val text = ctx.contentResolver.openInputStream(uri)!!.use { String(it.readBytes()) }
                     val r = backup.restore(text, _songs.value, playlists, stats)
-                    "Restored ${r.playlists} playlists, ${r.matched} songs matched, ${r.missing} not found on this phone. " +
-                        "Restart the app to apply settings and equalizer."
+                    "Restored ${r.playlists} playlists, ${r.matched} songs matched, ${r.missing} not found on this phone. Restart the app to apply settings and equalizer."
                 }.getOrElse { "Restore failed: ${it.message}" }
             }
         }
     }
 
-    // ReplayGain settings are read by the playback service (same preferences file).
     fun setRgMode(mode: Int) { prefs.edit().putInt("rg_mode", mode).apply(); _rgMode.value = mode }
     fun setRgPreamp(db: Float) {
         val v = db.coerceIn(-12f, 12f); prefs.edit().putFloat("rg_preamp", v).apply(); _rgPreamp.value = v
@@ -359,7 +380,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun setRgLimit(on: Boolean) { prefs.edit().putBoolean("rg_limit", on).apply(); _rgLimit.value = on }
 
-    /** e.g. "-6.2 dB" for the current song, "no tag · +0.0 dB" when the file has no ReplayGain tag. */
     fun replayGainLabel(songId: Long): String? {
         val s = ReplayGain.readSettings(prefs)
         if (s.mode == ReplayGain.MODE_OFF) return null
@@ -430,8 +450,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (from in 0 until c.mediaItemCount && to in 0 until c.mediaItemCount) c.moveMediaItem(from, to)
     }
 
-    // ------------------------------------------------------------- VLC-style extras
-
     fun setSpeed(speed: Float) {
         controller?.let { MediaPlayerManager.setPlaybackSpeed(it, speed) }
         refreshUi()
@@ -442,7 +460,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         refreshUi()
     }
 
-    /** Tap 1 = set A, tap 2 = set B (loop A-B), tap 3 = clear. */
     fun cycleAb() {
         val c = controller ?: return
         when {
@@ -476,7 +493,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun setDynamicColors(enabled: Boolean) {
         prefs.edit().putBoolean("dynamic_colors", enabled).apply()
         _dynamic.value = enabled
-        artFor = null   // force art/accent to be recomputed
+        artFor = null
         refreshUi()
     }
 
