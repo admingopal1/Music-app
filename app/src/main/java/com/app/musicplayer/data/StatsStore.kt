@@ -44,6 +44,22 @@ class StatsStore(ctx: Context) {
         _stats.value = _stats.value + (id to updated)
     }
 
+    /** Applies cloud values only when the local entry still matches the sync snapshot. */
+    fun applyCloudMerge(entries: Map<Long, SongStats>, expectedUpdatedAt: Map<Long, Long>): Int {
+        if (entries.isEmpty()) return 0
+        val current = _stats.value
+        val accepted = entries.filter { (id, _) ->
+            (current[id]?.updatedAt ?: 0L) == (expectedUpdatedAt[id] ?: 0L)
+        }
+        if (accepted.isEmpty()) return 0
+        val editor = prefs.edit()
+        accepted.forEach { (id, stat) ->
+            editor.putString(id.toString(), "${if (stat.favorite) 1 else 0},${stat.rating},${stat.plays},${stat.lastPlayed},${stat.updatedAt}")
+        }
+        editor.apply()
+        _stats.value = current + accepted
+        return accepted.size
+    }
     /** Writes many entries at once (used by restore). */
     fun putAll(entries: Map<Long, SongStats>) {
         if (entries.isEmpty()) return
