@@ -58,6 +58,7 @@ fun VideosScreen(vm: PlayerViewModel) {
     val videos by vm.videos.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
     var showDownloads by rememberSaveable { mutableStateOf(false) }
+    var showYouTube by rememberSaveable { mutableStateOf(false) }
 
     val filtered = remember(videos, query) {
         if (query.isBlank()) videos
@@ -65,14 +66,20 @@ fun VideosScreen(vm: PlayerViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (showDownloads) TextButton(onClick = { showDownloads = false }) { Text("My videos") }
-            else Button(onClick = { showDownloads = false }) { Text("My videos") }
-            if (showDownloads) Button(onClick = { showDownloads = true }) { Text("Downloads") }
-            else TextButton(onClick = { showDownloads = true }) { Text("Downloads") }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!showDownloads && !showYouTube) Button(onClick = { showDownloads = false; showYouTube = false }) { Text("My videos") }
+            else TextButton(onClick = { showDownloads = false; showYouTube = false }) { Text("My videos") }
+            if (showDownloads) Button(onClick = { showDownloads = true; showYouTube = false }) { Text("Downloads") }
+            else TextButton(onClick = { showDownloads = true; showYouTube = false }) { Text("Downloads") }
+            if (showYouTube) Button(onClick = { showYouTube = true; showDownloads = false }) { Text("YouTube") }
+            else TextButton(onClick = { showYouTube = true; showDownloads = false }) { Text("YouTube") }
         }
         if (showDownloads) {
             DownloadsHubScreen()
+            return@Column
+        }
+        if (showYouTube) {
+            YouTubeHubScreen()
             return@Column
         }
         Text(
