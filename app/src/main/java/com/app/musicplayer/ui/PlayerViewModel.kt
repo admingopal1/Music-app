@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
@@ -518,13 +519,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             _sleepLeft.value = 0L
             return
         }
+        val durationMs = PlaybackOptions.sleepDurationMs(minutes)
+        if (durationMs <= 0L) {
+            _sleepLeft.value = 0L
+            return
+        }
         sleepJob = viewModelScope.launch {
-            var left = minutes * 60_000L
-            while (left > 0) {
+            // elapsedRealtime is monotonic, so timer accuracy is not affected by
+            // wall-clock changes or delays while the coroutine is suspended.
+            val deadline = SystemClock.elapsedRealtime() + durationMs
+            while (true) {
+                val left = PlaybackOptions.remainingMs(deadline, SystemClock.elapsedRealtime())
                 _sleepLeft.value = left
-                if (left <= 15_000L) runCatching { controller?.volume = (left / 15_000f).coerceIn(0f, 1f) }
-                delay(1000)
-                left -= 1000
+                if (left <= 0L) break
+                runCatching { controller?.volume = PlaybackOptions.sleepFadeVolume(left) }
+                delay(minOf(1_000L, left))
             }
             _sleepLeft.value = 0L
             controller?.pause()
