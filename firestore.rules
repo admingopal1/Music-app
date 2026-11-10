@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Private user data: authenticated owner only.
+    match /users/{uid}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Server-managed rate limits and operational data are never client-accessible.
+    match /_server/{document=**} {
+      allow read, write: if false;
+    }
+
+    // Default deny for all other documents.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
