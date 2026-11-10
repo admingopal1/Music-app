@@ -53,6 +53,7 @@ import com.app.musicplayer.ui.screens.PlayerScreen
 import com.app.musicplayer.ui.screens.MiniPlayer
 import com.app.musicplayer.ui.screens.PlaylistsScreen
 import com.app.musicplayer.ui.screens.VideosScreen
+import com.app.musicplayer.ui.screens.YouTubeHubScreen
 import com.app.musicplayer.ui.screens.ShareScreen
 import com.app.musicplayer.ui.theme.MusicTheme
 
@@ -87,6 +88,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
         Tab("EQ & DSP", Icons.Rounded.GraphicEq),
         Tab("Playlists", Icons.AutoMirrored.Rounded.QueueMusic),
         Tab("Videos", Icons.Rounded.VideoLibrary),
+        Tab("YouTube", Icons.Rounded.PlayCircle),
         Tab("Share", Icons.Rounded.Share),
     )
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -129,6 +131,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                         2 -> EqualizerScreen(vm.fx)
                         3 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 1 })
                         4 -> VideosScreen(vm)
+                        5 -> YouTubeHubScreen()
                         else -> ShareScreen(vm)
                     }
                 }
