@@ -28,6 +28,7 @@
         android:usesPermissionFlags="neverForLocation" />
 
     <application
+        android:name=".MusicApp"
         android:allowBackup="true"
         android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher"

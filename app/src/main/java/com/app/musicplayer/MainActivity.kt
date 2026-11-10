@@ -45,7 +45,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -76,7 +75,22 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
         )
-        setContent { FirebaseAuthGate { AppRoot() } }
+        val lastCrash = CrashLog.read(this)
+        setContent {
+            var report by remember { mutableStateOf(lastCrash) }
+            val current = report
+            if (current != null) {
+                CrashReportScreen(
+                    report = current,
+                    onContinue = {
+                        CrashLog.clear(this@MainActivity)
+                        report = null
+                    },
+                )
+            } else {
+                FirebaseAuthGate { AppRoot() }
+            }
+        }
     }
 }
 
@@ -114,14 +128,15 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showMore by remember { mutableStateOf(false) }
-    val tabHistory = rememberSaveable { mutableStateListOf<Int>() }
+    // A plain List<Int> is Bundle-safe; mutableStateListOf is not and can crash when screen state is saved.
+    var tabHistory by rememberSaveable { mutableStateOf<List<Int>>(emptyList()) }
 
     fun openTab(destination: Int) {
         if (destination == tab) {
             showMore = false
             return
         }
-        tabHistory.add(tab)
+        tabHistory = (tabHistory + tab).takeLast(20)
         tab = destination
         showMore = false
     }
@@ -131,8 +146,8 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             showMore = false
             return@BackHandler
         }
-        val previous = tabHistory.removeLastOrNull()
-        tab = previous ?: 0
+        tab = tabHistory.lastOrNull() ?: 0
+        tabHistory = tabHistory.dropLast(1)
     }
 
     MusicTheme(accent = accent, amoled = amoled) {
