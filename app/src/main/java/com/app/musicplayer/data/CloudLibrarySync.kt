@@ -24,7 +24,6 @@ class CloudLibrarySync(
         val userDoc = db.collection("users").document(user.uid)
         val libraryDoc = userDoc.collection("private").document("library")
         val localLists = playlists.lists.value
-        val localDeletedNames = playlists.deletedNames.value
         val localStats = stats.stats.value
 
         val localPlaylistPayload = localLists.mapValues { (_, ids) ->
