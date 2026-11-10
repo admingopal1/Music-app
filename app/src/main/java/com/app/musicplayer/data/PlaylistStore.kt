@@ -57,7 +57,7 @@ class PlaylistStore(context: Context) {
     fun removeSong(name: String, songId: Long) {
         val cur = _lists.value[name] ?: return
         if (songId !in cur) return
-        persistUpdatedAt(_updatedAt.value + (name to System.currentTimeMillis()))
+        persistUpdatedAt(_updatedAt.value + (name to nextTimestamp(name)))
         commit(_lists.value + (name to cur - songId))
     }
 
