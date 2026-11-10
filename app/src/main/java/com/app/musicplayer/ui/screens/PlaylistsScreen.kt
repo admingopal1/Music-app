@@ -2,6 +2,8 @@ package com.app.musicplayer.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -60,11 +62,20 @@ fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
         }
 
         if (lists.isEmpty()) {
-            Text(
-                "No playlists yet. Create one, then use ⋮ on any song in the Library to add it.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(24.dp),
-            )
+            Column(
+                Modifier.fillMaxWidth().padding(24.dp).background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(24.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp)).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Icons.Rounded.PlayArrow, null, tint = Color(0xFFE3B5FF))
+                Text("Your soundtrack starts here", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("Create a playlist, then add songs from the Library using a song's menu.", color = Color.White.copy(alpha = 0.68f), style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                FilledTonalButton(onClick = { showCreate = true }, shape = RoundedCornerShape(16.dp)) {
+                    Icon(Icons.Rounded.Add, null)
+                    Text("  Create playlist")
+                }
+            }
         }
 
         LazyColumn(
