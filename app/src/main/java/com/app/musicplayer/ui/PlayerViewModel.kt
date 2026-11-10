@@ -119,6 +119,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val rgLimit: StateFlow<Boolean> = _rgLimit.asStateFlow()
 
     private var controller: MediaController? = null
+    // Keep the user's first play request if the MediaSession connection is still starting.
+    private var pendingPlayback: Pair<List<Song>, Int>? = null
     private var songById: Map<Long, Song> = emptyMap()
     private var artFor: Long? = null
     private var artJob: Job? = null
@@ -157,6 +159,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 controller = c
                 c.addListener(listener)
                 refreshUi()
+                // Avoid a silent no-op when a user taps Play before the service connects.
+                pendingPlayback?.let { (list, index) ->
+                    pendingPlayback = null
+                    playSongs(list, index)
+                }
             }
         }, ContextCompat.getMainExecutor(ctx))
     }
@@ -254,8 +261,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------- playback
 
     fun playSongs(list: List<Song>, index: Int) {
-        val c = controller ?: return
         if (list.isEmpty()) return
+        val c = controller
+        if (c == null) {
+            pendingPlayback = list to index.coerceIn(0, list.lastIndex)
+            return
+        }
+        pendingPlayback = null
         c.setMediaItems(list.map { it.toMediaItem() }, index.coerceIn(0, list.lastIndex), 0L)
         c.prepare()
         c.play()
@@ -454,9 +466,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSleepTimer(minutes: Int) {
         sleepJob?.cancel()
+        // A previous timer may have already started its final-volume fade.
+        runCatching { controller?.volume = 1f }
         if (minutes <= 0) {
             _sleepLeft.value = 0L
-            runCatching { controller?.volume = 1f }
             return
         }
         sleepJob = viewModelScope.launch {
@@ -481,6 +494,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        sleepJob?.cancel()
+        sleepJob = null
+        _sleepLeft.value = 0L
+        runCatching { controller?.volume = 1f }
+        pendingPlayback = null
         controller?.removeListener(listener)
         controller?.release()
         controller = null
