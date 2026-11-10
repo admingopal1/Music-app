@@ -40,10 +40,10 @@ internal fun InputStream.skipFully(byteCount: Long): Boolean {
             remaining -= skipped
             continue
         }
-        val read = read(buffer, 0, minOf(remaining, buffer.size.toLong()).toInt())
+        val bytesRead = read(buffer, 0, minOf(remaining, buffer.size.toLong()).toInt())
         when {
-            read > 0 -> remaining -= read.toLong()
-            read < 0 -> return false
+            bytesRead > 0 -> remaining -= bytesRead.toLong()
+            bytesRead < 0 -> return false
             else -> {
                 if (read() < 0) return false
                 remaining--
