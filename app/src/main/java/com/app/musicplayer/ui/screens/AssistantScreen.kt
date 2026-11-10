@@ -31,6 +31,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,6 +40,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.app.musicplayer.data.CloudLibrarySync
 import com.app.musicplayer.data.asClock
 import com.app.musicplayer.ui.PlayerViewModel
 
@@ -50,6 +53,10 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     var prompt by rememberSaveable { mutableStateOf("") }
     var answer by rememberSaveable { mutableStateOf("Tell me what you want to hear. I can search your library, build a mix, or save a playlist.") }
     var resultIds by rememberSaveable { mutableStateOf<List<Long>>(emptyList()) }
+    var cloudBusy by remember { mutableStateOf(false) }
+    var cloudMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val cloudSync = remember { CloudLibrarySync() }
     val selected = songs.filter { it.id in resultIds }
 
     fun runPrompt(raw: String) {
@@ -121,6 +128,27 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             Column(Modifier.padding(start = 10.dp)) {
                 Text("Music Assistant", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("Private · On-device · No account required", color = Color.White.copy(0.65f), style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Cloud library sync", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("Merge playlists and favourites across your signed-in devices", color = Color.White.copy(0.65f), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(enabled = !cloudBusy, onClick = {
+                        cloudBusy = true
+                        cloudMessage = "Syncing…"
+                        scope.launch {
+                            cloudMessage = runCatching {
+                                cloudSync.sync(songs, vm.playlists, vm.stats)
+                            }.getOrElse { "Sync failed: ${it.localizedMessage ?: "Check internet, sign-in and Firestore rules."}" }
+                            cloudBusy = false
+                        }
+                    }) { Text(if (cloudBusy) "Syncing…" else "Sync now") }
+                }
+                cloudMessage?.let { Text(it, color = Color(0xFFE3A7FF), style = MaterialTheme.typography.bodySmall) }
             }
         }
         Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.10f)), shape = RoundedCornerShape(22.dp)) {
