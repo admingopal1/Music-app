@@ -17,7 +17,6 @@ class PlaylistStore(context: Context) {
     private val _deletedAt = MutableStateFlow(loadTimestamps("deleted_at"))
     val deletedAt: StateFlow<Map<String, Long>> = _deletedAt.asStateFlow()
 
-    @Synchronized
     fun create(name: String) {
         val n = name.trim()
         if (n.isEmpty() || _lists.value.containsKey(n)) return
@@ -27,7 +26,6 @@ class PlaylistStore(context: Context) {
         commit(_lists.value + (n to emptyList()))
     }
 
-    @Synchronized
     fun delete(name: String) {
         if (name !in _lists.value) return
         val now = nextTimestamp(name)
@@ -36,7 +34,6 @@ class PlaylistStore(context: Context) {
         commit(_lists.value - name)
     }
 
-    @Synchronized
     fun replaceAll(map: Map<String, List<Long>>) {
         persistUpdatedAt(map.keys.associateWith { nextTimestamp(it) })
         persistDeletedAt(emptyMap())
@@ -44,38 +41,12 @@ class PlaylistStore(context: Context) {
     }
 
     /** Apply a resolved cloud snapshot and its timestamped conflict metadata. */
-    @Synchronized
     fun applyCloudMerge(map: Map<String, List<Long>>, updated: Map<String, Long>, deleted: Map<String, Long>) {
         persistUpdatedAt(updated.filterKeys { it in map.keys })
         persistDeletedAt(deleted.filterKeys { it !in map.keys })
         commit(map)
     }
 
-    /**
-     * Atomically checks that no local edit happened during network sync before
-     * applying the remote snapshot. Prevents a check/apply race from losing edits.
-     */
-    @Synchronized
-    fun applyCloudMergeIfUnchanged(
-        expectedLists: Map<String, List<Long>>,
-        expectedUpdated: Map<String, Long>,
-        expectedDeleted: Map<String, Long>,
-        mergedLists: Map<String, List<Long>>,
-        mergedUpdated: Map<String, Long>,
-        mergedDeleted: Map<String, Long>,
-    ): Boolean {
-        if (_lists.value != expectedLists ||
-            _updatedAt.value != expectedUpdated ||
-            _deletedAt.value != expectedDeleted
-        ) return false
-
-        persistUpdatedAt(mergedUpdated.filterKeys { it in mergedLists.keys })
-        persistDeletedAt(mergedDeleted.filterKeys { it !in mergedLists.keys })
-        commit(mergedLists)
-        return true
-    }
-
-    @Synchronized
     fun addSong(name: String, songId: Long) {
         val cur = _lists.value[name] ?: return
         if (songId in cur) return
@@ -83,7 +54,6 @@ class PlaylistStore(context: Context) {
         commit(_lists.value + (name to cur + songId))
     }
 
-    @Synchronized
     fun removeSong(name: String, songId: Long) {
         val cur = _lists.value[name] ?: return
         if (songId !in cur) return

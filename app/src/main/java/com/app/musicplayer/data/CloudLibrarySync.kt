@@ -3,6 +3,8 @@ package com.app.musicplayer.data
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Spark-tier, user-scoped sync. Local IDs are never uploaded as device-global IDs;
@@ -13,7 +15,19 @@ class CloudLibrarySync(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
     private val db: FirebaseFirestore = FirebaseFirestore.getInstance(),
 ) {
+    // Automatic and user-triggered syncs share this instance; serialize them to
+    // prevent overlapping local snapshots and redundant Firestore transactions.
+    private val syncMutex = Mutex()
+
     suspend fun sync(
+        songs: List<Song>,
+        playlists: PlaylistStore,
+        stats: StatsStore,
+    ): String = syncMutex.withLock {
+        syncUnlocked(songs, playlists, stats)
+    }
+
+    private suspend fun syncUnlocked(
         songs: List<Song>,
         playlists: PlaylistStore,
         stats: StatsStore,
@@ -179,7 +193,7 @@ class CloudLibrarySync(
         // Check and apply under the PlaylistStore lock so a local edit cannot
         // slip between the snapshot comparison and the cloud merge.
         // The debounced StateFlow observer schedules another sync if this returns false.
-        playlists.applyCloudMergeIfUnchanged(
+        val playlistApplied = playlists.applyCloudMergeIfUnchanged(
             expectedLists = localLists,
             expectedUpdated = localUpdated,
             expectedDeleted = localDeletedAt,
@@ -208,7 +222,9 @@ class CloudLibrarySync(
             )
         }
         val appliedStats = stats.applyCloudMerge(updates, expectedUpdatedAt)
-        return "Cloud sync complete: ${mergedLists.size} playlists and ${appliedStats} matched tracks. Local data was merged, not replaced."
+        val status = "Cloud sync complete: ${mergedLists.size} playlists and ${appliedStats} matched tracks. Local data was merged, not replaced."
+        return if (playlistApplied) status else
+            "$status A playlist changed during sync; the latest local edit will be picked up by the automatic sync cycle."
     }
 
     private fun trackPayload(song: Song): Map<String, Any> = mapOf(
