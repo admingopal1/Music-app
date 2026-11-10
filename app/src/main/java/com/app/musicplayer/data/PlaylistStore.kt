@@ -20,7 +20,7 @@ class PlaylistStore(context: Context) {
     fun create(name: String) {
         val n = name.trim()
         if (n.isEmpty() || _lists.value.containsKey(n)) return
-        val now = System.currentTimeMillis()
+        val now = nextTimestamp(n)
         persistDeletedAt(_deletedAt.value - n)
         persistUpdatedAt(_updatedAt.value + (n to now))
         commit(_lists.value + (n to emptyList()))
@@ -28,15 +28,14 @@ class PlaylistStore(context: Context) {
 
     fun delete(name: String) {
         if (name !in _lists.value) return
-        val now = System.currentTimeMillis()
+        val now = nextTimestamp(name)
         persistUpdatedAt(_updatedAt.value - name)
         persistDeletedAt(_deletedAt.value + (name to now))
         commit(_lists.value - name)
     }
 
     fun replaceAll(map: Map<String, List<Long>>) {
-        val now = System.currentTimeMillis()
-        persistUpdatedAt(map.keys.associateWith { now })
+        persistUpdatedAt(map.keys.associateWith { nextTimestamp(it) })
         persistDeletedAt(emptyMap())
         commit(map)
     }
@@ -51,7 +50,7 @@ class PlaylistStore(context: Context) {
     fun addSong(name: String, songId: Long) {
         val cur = _lists.value[name] ?: return
         if (songId in cur) return
-        persistUpdatedAt(_updatedAt.value + (name to System.currentTimeMillis()))
+        persistUpdatedAt(_updatedAt.value + (name to nextTimestamp(name)))
         commit(_lists.value + (name to cur + songId))
     }
 
@@ -61,6 +60,12 @@ class PlaylistStore(context: Context) {
         persistUpdatedAt(_updatedAt.value + (name to System.currentTimeMillis()))
         commit(_lists.value + (name to cur - songId))
     }
+
+    // Ensure two quick edits on the same playlist still have a strict local order.
+    private fun nextTimestamp(name: String): Long = maxOf(
+        System.currentTimeMillis(),
+        maxOf(_updatedAt.value[name] ?: 0L, _deletedAt.value[name] ?: 0L) + 1L,
+    )
 
     private fun persistUpdatedAt(values: Map<String, Long>) {
         _updatedAt.value = values
