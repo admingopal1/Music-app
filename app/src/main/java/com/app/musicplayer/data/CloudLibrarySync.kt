@@ -41,6 +41,8 @@ class CloudLibrarySync(
         val userDoc = db.collection("users").document(user.uid)
         val libraryDoc = userDoc.collection("private").document("library")
         val localLists = playlists.lists.value
+        val localUpdated = playlists.updatedAt.value
+        val localDeletedAt = playlists.deletedAt.value
         val localStats = stats.stats.value
 
         val localPlaylistPayload = localLists.mapValues { (_, ids) ->
@@ -72,8 +74,6 @@ class CloudLibrarySync(
         // Migrate older name-only tombstones into timestamped delete markers.
         val legacyDeleted = (remote["deletedPlaylists"] as? List<*>)?.mapNotNull { it as? String }
             ?.associateWith { name -> remoteDeletedAt[name] ?: remoteUpdated[name] ?: System.currentTimeMillis() }.orEmpty()
-        val localUpdated = playlists.updatedAt.value
-        val localDeletedAt = playlists.deletedAt.value
         val names = (remoteLists.keys.mapNotNull { it as? String } + localPlaylistPayload.keys +
             remoteUpdated.keys + remoteDeletedAt.keys + legacyDeleted.keys +
             localUpdated.keys + localDeletedAt.keys).distinct()
@@ -176,12 +176,23 @@ class CloudLibrarySync(
             // it exactly is required for removals to propagate to this device.
             restoredLists[name] = ids
         }
-        playlists.applyCloudMerge(restoredLists, mergedUpdatedAt, boundedDeletedAt)
+        // Do not overwrite edits made locally while the network sync was in flight.
+        // The debounced StateFlow observer will schedule another sync for those edits.
+        val playlistsUnchanged = playlists.lists.value == localLists &&
+            playlists.updatedAt.value == localUpdated &&
+            playlists.deletedAt.value == localDeletedAt
+        if (playlistsUnchanged) {
+            playlists.applyCloudMerge(restoredLists, mergedUpdatedAt, boundedDeletedAt)
+        }
 
         val updates = HashMap<Long, SongStats>()
         mergedStats.forEach { (key, value) ->
             val song = index[key]?.firstOrNull() ?: return@forEach
+            val snapshotStat = localStats[song.id] ?: SongStats()
             val current = stats.stats.value[song.id] ?: SongStats()
+            // A changed timestamp means the user played/liked/rated this track
+            // after the sync snapshot; preserve that newer local state.
+            if (current.updatedAt != snapshotStat.updatedAt) return@forEach
             val rating = (value["rating"] as? Number)?.toInt() ?: current.rating
             updates[song.id] = SongStats(
                 favorite = (value["favorite"] as? Boolean) ?: current.favorite,
