@@ -150,6 +150,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         data class PlayNext(val song: Song) : PendingPlaybackAction
         data class AddToQueue(val song: Song) : PendingPlaybackAction
         data class PlayUrl(val url: String) : PendingPlaybackAction
+        data object TogglePlayback : PendingPlaybackAction
     }
 
     // Retain queue requests until the MediaSession controller is connected.
@@ -214,6 +215,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                         is PendingPlaybackAction.PlayNext -> playNext(action.song)
                         is PendingPlaybackAction.AddToQueue -> addToQueue(action.song)
                         is PendingPlaybackAction.PlayUrl -> playUrl(action.url)
+                        PendingPlaybackAction.TogglePlayback -> togglePlay()
                     }
                 }
             }
@@ -352,8 +354,30 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun togglePlay() {
-        val c = controller ?: return
-        if (c.isPlaying) c.pause() else c.play()
+        val c = controller
+        if (c == null) {
+            // Preserve a tap made while the MediaSession is still connecting.
+            pendingPlayback.enqueue(PendingPlaybackAction.TogglePlayback)
+            return
+        }
+        if (c.mediaItemCount == 0) return
+
+        // ExoPlayer remains in STATE_ENDED after a track finishes. Explicitly
+        // seek to the beginning before requesting playback again.
+        if (c.playbackState == Player.STATE_ENDED) {
+            c.seekToDefaultPosition()
+            c.prepare()
+            c.play()
+            return
+        }
+
+        // playWhenReady also covers buffering, where isPlaying is still false.
+        if (c.playWhenReady) {
+            c.pause()
+        } else {
+            if (c.playbackState == Player.STATE_IDLE) c.prepare()
+            c.play()
+        }
     }
 
     fun next() { controller?.seekToNext() }
