@@ -15,6 +15,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.palette.graphics.Palette
@@ -68,6 +69,7 @@ data class PlayerUi(
     val repeatMode: Int = Player.REPEAT_MODE_OFF,
     val speed: Float = 1f,
     val pitch: Float = 1f,
+    val playbackError: String? = null,
 )
 
 @OptIn(FlowPreview::class)
@@ -162,6 +164,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = refreshUi()
 
+        override fun onPlayerError(error: PlaybackException) {
+            _ui.update {
+                it.copy(
+                    isPlaying = false,
+                    playbackError = "Playback error: ${error.errorCodeName} — ${error.message ?: "Unknown media error"}"
+                )
+            }
+        }
+
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             mediaItem?.mediaId?.toLongOrNull()?.let { stats.recordPlay(it) }
         }
@@ -236,6 +247,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             repeatMode = c.repeatMode,
             speed = c.playbackParameters.speed,
             pitch = c.playbackParameters.pitch,
+            playbackError = _ui.value.playbackError,
         )
         if (song?.id != artFor) {
             artFor = song?.id
@@ -343,6 +355,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             pendingPlayback.enqueue(PendingPlaybackAction.ReplaceSongs(list, index.coerceIn(0, list.lastIndex)))
             return
         }
+        _ui.update { it.copy(playbackError = null) }
         c.setMediaItems(list.map { it.toMediaItem() }, index.coerceIn(0, list.lastIndex), 0L)
         c.prepare()
         c.play()
@@ -503,6 +516,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             pendingPlayback.enqueue(PendingPlaybackAction.PlayUrl(url))
             return
         }
+        _ui.update { it.copy(playbackError = null) }
         val item = MediaItem.Builder()
             .setMediaId(url)
             .setUri(url)

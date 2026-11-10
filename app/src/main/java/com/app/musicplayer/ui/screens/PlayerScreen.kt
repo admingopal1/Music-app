@@ -190,6 +190,15 @@ fun PlayerScreen(vm: PlayerViewModel) {
 
                 GlassCard(Modifier.fillMaxWidth()) {
                     ProgressBar(ui.positionMs, ui.durationMs, accent, vm::seekTo)
+                    if (ui.playbackError != null) {
+                        Text(
+                            ui.playbackError,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                     Spacer(Modifier.height(8.dp))
                     Row(
                         Modifier.fillMaxWidth(),
