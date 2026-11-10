@@ -69,7 +69,7 @@ private val MODE_ORDER = listOf(0, 8, 9, 1, 2, 3, 4, 5, 6, 7)
 private data class Group(val key: String, val title: String, val subtitle: String, val songs: List<Song>)
 
 @Composable
-fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
+fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit, onOpenShare: () -> Unit = {}) {
     val songs by vm.songs.collectAsStateWithLifecycle()
     val ui by vm.ui.collectAsStateWithLifecycle()
     val playlists by vm.playlists.lists.collectAsStateWithLifecycle()
@@ -227,6 +227,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                         onAddToQueue = { vm.addToQueue(song) },
                         onRadio = { vm.startAiRadio(song); onOpenPlayer() },
                         onRingtone = { ringtoneFor = song },
+                        onSend = { vm.share.addOutgoing(listOf(song.uri)); onOpenShare() },
                         onAddToPlaylist = { vm.playlists.addSong(it, song.id) },
                     )
                 }
@@ -278,7 +279,7 @@ private fun GroupRow(title: String, subtitle: String, count: Int, onClick: () ->
 private fun SongRow(
     song: Song, current: Boolean, favorite: Boolean, playlistNames: List<String>,
     onClick: () -> Unit, onFavorite: () -> Unit, onPlayNext: () -> Unit, onAddToQueue: () -> Unit,
-    onRadio: () -> Unit, onRingtone: () -> Unit, onAddToPlaylist: (String) -> Unit,
+    onRadio: () -> Unit, onRingtone: () -> Unit, onSend: () -> Unit, onAddToPlaylist: (String) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -320,6 +321,7 @@ private fun SongRow(
                 DropdownMenuItem(text = { Text("Add to queue") }, onClick = { onAddToQueue(); menu = false })
                 DropdownMenuItem(text = { Text("Start AI radio (similar songs)") }, onClick = { onRadio(); menu = false })
                 DropdownMenuItem(text = { Text("Make ringtone (AI cutter)") }, onClick = { onRingtone(); menu = false })
+                DropdownMenuItem(text = { Text("Send to nearby phone") }, onClick = { onSend(); menu = false })
                 if (playlistNames.isEmpty()) {
                     DropdownMenuItem(text = { Text("Create a playlist first") }, onClick = { menu = false }, enabled = false)
                 } else {

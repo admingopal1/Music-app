@@ -59,6 +59,10 @@ import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Refresh
+import com.app.musicplayer.share.ApprovalRequest
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -128,8 +132,8 @@ fun ShareScreen(vm: PlayerViewModel) {
             delay(4000)
         }
     }
-    LaunchedEffect(ui.libraryChanged) {
-        if (ui.libraryChanged > 0) { vm.loadLibrary(); vm.loadVideos() }
+    LaunchedEffect(ui.libraryChanged, ui.playlistsReceived) {
+        if (ui.libraryChanged > 0 || ui.playlistsReceived > 0) { vm.loadLibrary(); vm.loadVideos() }
     }
     LaunchedEffect(ui.message) {
         ui.message?.let { Toast.makeText(ctx, it, Toast.LENGTH_LONG).show(); share.clearMessage() }
@@ -261,6 +265,7 @@ fun ShareScreen(vm: PlayerViewModel) {
                     ui,
                     onCopy = { clipboard.setText(AnnotatedString(it)); Toast.makeText(ctx, "Link copied", Toast.LENGTH_SHORT).show() },
                     onShareLink = { shareText(ctx, it) },
+                    onAskChange = share::setAskBeforeReceive,
                 )
             }
         }
@@ -301,6 +306,8 @@ fun ShareScreen(vm: PlayerViewModel) {
             items(ui.items, key = { it.id }) { item ->
                 TransferRow(
                     item, fmt = share::fmtSize,
+                    canRetry = item.direction == Direction.OUT && share.canRetry(item.id),
+                    onRetry = { share.retry(item.id) },
                     onCancel = { share.cancel(item.id) },
                     onOpen = { openFile(ctx, item) },
                     onShare = { shareFile(ctx, item) },
@@ -449,7 +456,7 @@ private fun ShareCard(content: @Composable ColumnScope.() -> Unit) {
 // ---------------------------------------------------------------------- cards
 
 @Composable
-private fun SessionCard(ui: ShareUi, onCopy: (String) -> Unit, onShareLink: (String) -> Unit) {
+private fun SessionCard(ui: ShareUi, onCopy: (String) -> Unit, onShareLink: (String) -> Unit, onAskChange: (Boolean) -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     val url = ui.urls.firstOrNull()
     val qr = remember(url) { url?.let { QrUtil.encode(it, 480)?.asImageBitmap() } }
@@ -490,11 +497,35 @@ private fun SessionCard(ui: ShareUi, onCopy: (String) -> Unit, onShareLink: (Str
             }
         }
         Text(
-            "Another phone with this app: tap Scan QR, or pick this phone from the radar and type the PIN.\n" +
-                "PC or any phone browser: open the link and enter the PIN to send or download files.",
+            "Another phone with this app: tap Scan QR, or pick this phone from the radar and type the PIN. " +
+                "App-to-app transfers are end-to-end encrypted, resume after a dropped connection and are checksum-verified.\n" +
+                "PC, TV or any browser: open the link and enter the PIN to play your music in the web player, download or drop files.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Ask before accepting new devices", fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Each new phone or browser must be accepted here once.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = ui.askBeforeReceive, onCheckedChange = onAskChange)
+        }
     }
+}
+
+/** Shown app-wide when a new device wants to send files or open the web player. */
+@Composable
+fun ShareApprovalDialog(req: ApprovalRequest, onDecide: (Boolean) -> Unit) {
+    AlertDialog(
+        onDismissRequest = {},
+        icon = { Icon(Icons.Rounded.Lock, null) },
+        title = { Text("Allow ${req.from}?") },
+        text = { Text("${req.from} (${req.ip}) wants to send files to this phone or open your web player. Only allow devices you know.") },
+        confirmButton = { TextButton(onClick = { onDecide(true) }) { Text("Allow") } },
+        dismissButton = { TextButton(onClick = { onDecide(false) }) { Text("Decline") } },
+    )
 }
 
 @Composable
@@ -588,7 +619,8 @@ private fun HowItWorks() {
 
 @Composable
 private fun TransferRow(
-    item: TransferItem, fmt: (Long) -> String, onCancel: () -> Unit, onOpen: () -> Unit, onShare: () -> Unit,
+    item: TransferItem, fmt: (Long) -> String, canRetry: Boolean, onRetry: () -> Unit,
+    onCancel: () -> Unit, onOpen: () -> Unit, onShare: () -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val active = item.status == Status.ACTIVE || item.status == Status.QUEUED
@@ -599,7 +631,10 @@ private fun TransferRow(
                 contentAlignment = Alignment.Center,
             ) { Icon(iconFor(item.mime), null, tint = accent) }
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (item.secure) Icon(Icons.Rounded.Lock, "Encrypted", tint = Color(0xFF00BFA5), modifier = Modifier.size(14.dp).padding(end = 4.dp))
+                    Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                }
                 val dir = if (item.direction == Direction.IN) "from" else "to"
                 val peer = if (item.peer.isBlank()) "" else " $dir ${item.peer}"
                 Text(
@@ -616,8 +651,13 @@ private fun TransferRow(
                     color = if (item.status == Status.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
+                item.note?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
             when {
+                canRetry && (item.status == Status.FAILED || item.status == Status.CANCELLED) ->
+                    IconButton(onClick = onRetry) { Icon(Icons.Rounded.Refresh, "Retry") }
                 active -> IconButton(onClick = onCancel) { Icon(Icons.Rounded.Close, "Cancel") }
                 item.status == Status.DONE -> Icon(Icons.Rounded.CheckCircle, null, tint = Color(0xFF00BFA5))
                 item.status == Status.FAILED -> Icon(Icons.Rounded.Error, null, tint = MaterialTheme.colorScheme.error)

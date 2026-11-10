@@ -238,6 +238,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             val list = MediaStoreRepository.loadSongs(ctx)
             songById = list.associateBy { it.id }
             _songs.value = list
+            share.library = list
+            share.resolvePlaylists(list, playlists)
             refreshUi()
         }
     }
