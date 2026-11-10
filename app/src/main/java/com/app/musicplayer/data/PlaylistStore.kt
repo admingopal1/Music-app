@@ -16,7 +16,6 @@ class PlaylistStore(context: Context) {
     val updatedAt: StateFlow<Map<String, Long>> = _updatedAt.asStateFlow()
     private val _deletedAt = MutableStateFlow(loadTimestamps("deleted_at"))
     val deletedAt: StateFlow<Map<String, Long>> = _deletedAt.asStateFlow()
-    val deletedNames: StateFlow<Set<String>> = MutableStateFlow(_deletedAt.value.keys).asStateFlow()
 
     fun create(name: String) {
         val n = name.trim()
