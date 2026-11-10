@@ -2,9 +2,11 @@ package com.app.musicplayer.audio
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
+import androidx.media3.common.util.UnstableApi
 import com.app.musicplayer.audio.dsp.Biquad
 import com.app.musicplayer.audio.dsp.Envelope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -206,6 +208,7 @@ class EngineAnalyzer(private val rate: Int) {
  * mono / balance → auto level → night compressor → look-ahead limiter → TPDF dither.
  * Works on 16-bit and float stereo; other formats pass through untouched.
  */
+@OptIn(UnstableApi::class)
 class EnhancerProcessor : BaseAudioProcessor() {
     @Volatile var settings = EnhancerSettings()
     private var encoding = C.ENCODING_INVALID
