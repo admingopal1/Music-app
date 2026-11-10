@@ -287,21 +287,27 @@ fun DownloadsHubScreen() {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (item.status == "Failed" && item.sourceUri.isNotBlank()) {
                                 TextButton(onClick = {
-                                    runCatching {
-                                        val parsed = Uri.parse(item.sourceUri)
-                                        val retryName = uniqueRetryFileName(item.title)
-                                        val request = DownloadManager.Request(parsed)
-                                            .setTitle(item.title)
-                                            .setDescription("Retrying download to Downloads/MusicPlayer")
-                                            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                                            .setAllowedOverMetered(true)
-                                            .setAllowedOverRoaming(false)
-                                            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "MusicPlayer/$retryName")
-                                        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                        manager.enqueue(request)
-                                        refresh()
-                                    }.onFailure {
-                                        Toast.makeText(context, "Retry failed: ${it.message}", Toast.LENGTH_LONG).show()
+                                    val source = Uri.parse(item.sourceUri)
+                                    if (source.scheme !in setOf("http", "https") || source.host.isNullOrBlank()) {
+                                        Toast.makeText(context, "Retry unavailable: original media URL is invalid", Toast.LENGTH_LONG).show()
+                                    } else if (hasActiveDownload(context, source.toString())) {
+                                        Toast.makeText(context, "This media URL is already queued or downloading", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        runCatching {
+                                            val retryName = uniqueRetryFileName(item.title)
+                                            val request = DownloadManager.Request(source)
+                                                .setTitle(item.title)
+                                                .setDescription("Retrying download to Downloads/MusicPlayer")
+                                                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                                .setAllowedOverMetered(true)
+                                                .setAllowedOverRoaming(false)
+                                                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "MusicPlayer/$retryName")
+                                            val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                            manager.enqueue(request)
+                                            refresh()
+                                        }.onFailure {
+                                            Toast.makeText(context, "Retry failed: ${it.message}", Toast.LENGTH_LONG).show()
+                                        }
                                     }
                                 }) {
                                     Icon(Icons.Rounded.Refresh, contentDescription = null)
@@ -403,6 +409,7 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
         val totalCol = c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
         val uriCol = c.getColumnIndex(DownloadManager.COLUMN_URI)
         val reasonCol = c.getColumnIndex(DownloadManager.COLUMN_REASON)
+        if (idCol < 0 || titleCol < 0 || statusCol < 0) return@use emptyList()
         val out = mutableListOf<DownloadRow>()
         while (c.moveToNext()) {
             val status = when (c.getInt(statusCol)) {
@@ -430,7 +437,9 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
                     else -> if (status == "Paused") "Download temporarily paused" else "Download failed (code " + c.getInt(reasonCol) + ")"
                 }
             } else ""
-            out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, c.getLong(bytesCol), c.getLong(totalCol), if (uriCol >= 0) c.getString(uriCol).orEmpty() else "", failureReason)
+            val downloaded = if (bytesCol >= 0) c.getLong(bytesCol).coerceAtLeast(0L) else 0L
+            val total = if (totalCol >= 0) c.getLong(totalCol).coerceAtLeast(0L) else 0L
+            out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, downloaded, total, if (uriCol >= 0) c.getString(uriCol).orEmpty() else "", failureReason)
         }
         out.sortedByDescending { it.id }.take(30)
     }
