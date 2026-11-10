@@ -109,7 +109,8 @@ class CloudLibrarySync(
         val payload = mapOf(
             "schemaVersion" to 2,
             "playlists" to mergedLists,
-            "playlistUpdatedAt" to mergedUpdatedAt,\n            "playlistDeletedAt" to boundedDeletedAt,\n            "deletedPlaylists" to boundedDeletedAt.keys.toList(),
+            "playlistUpdatedAt" to mergedUpdatedAt,
+            "playlistDeletedAt" to boundedDeletedAt,\n            "deletedPlaylists" to boundedDeletedAt.keys.toList(),
             "stats" to mergedStats,
             "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
         )
