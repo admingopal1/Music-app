@@ -102,7 +102,11 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             bottomBar = {
                 Column {
                     if (tab != 2) MiniPlayer(vm) { tab = 2 }
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)) {
+                    NavigationBar(
+                        containerColor = Color(0xFF171329).copy(alpha = 0.98f),
+                        tonalElevation = 10.dp,
+                        windowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+                    ) {
                         tabs.forEachIndexed { i, t ->
                             NavigationBarItem(
                                 selected = tab == i,
@@ -110,9 +114,9 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                                 icon = { Icon(t.icon, t.label) },
                                 label = { Text(t.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                                 colors = NavigationBarItemDefaults.colors(
-                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
-                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = Color(0xFFB77BFF).copy(alpha = 0.22f),
+                                    selectedIconColor = Color(0xFFE4B8FF),
+                                    selectedTextColor = Color(0xFFE4B8FF),
                                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 ),
