@@ -296,10 +296,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun songById(id: Long): Song? = songById[id]
 
-    fun importLyrics(songId: Long, uri: Uri, done: () -> Unit) {
+    fun importLyrics(songId: Long, uri: Uri, done: (Boolean) -> Unit) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { runCatching { lyricsRepo.importFor(songId, uri) } }
-            done()
+            val imported = withContext(Dispatchers.IO) {
+                runCatching { lyricsRepo.importFor(songId, uri) }.getOrDefault(false)
+            }
+            done(imported)
         }
     }
 

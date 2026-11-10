@@ -14,19 +14,26 @@ object Lrc {
     fun parse(raw: String): Lyrics? {
         val text = raw.removePrefix("\uFEFF")
         if (text.isBlank()) return null
-        val offset = OFFSET.find(text)?.groupValues?.get(1)?.toLongOrNull() ?: 0L
+        // Positive offsets delay lyrics; negative offsets advance them.
+        // Bound extreme metadata values to keep timestamp arithmetic safe.
+        val offset = (OFFSET.find(text)?.groupValues?.get(1)?.toLongOrNull() ?: 0L)
+            .coerceIn(-86_400_000L, 86_400_000L)
 
         val timed = ArrayList<LyricLine>()
         val plain = ArrayList<LyricLine>()
         for (rawLine in text.lineSequence()) {
             val line = rawLine.trim()
             if (line.isEmpty()) continue
-            val stamps = TIME.findAll(line).toList()
+            val stamps = TIME.findAll(line).filter { match ->
+                match.groupValues[2].toLongOrNull()?.let { it in 0L..59L } == true
+            }.toList()
             if (stamps.isEmpty()) {
-                if (!META.matches(line)) plain.add(LyricLine(-1L, line))
+                val textOnly = TIME.replace(line, "").replace(WORD_TAG, "").trim()
+                if (textOnly.isNotEmpty() && !META.matches(line)) plain.add(LyricLine(-1L, textOnly))
             } else {
-                val content = line.substring(stamps.last().range.last + 1).replace(WORD_TAG, "").trim()
-                for (m in stamps) timed.add(LyricLine((toMs(m) - offset).coerceAtLeast(0L), content))
+                val content = TIME.replace(line.substring(stamps.last().range.last + 1), "")
+                    .replace(WORD_TAG, "").trim()
+                for (m in stamps) timed.add(LyricLine((toMs(m) + offset).coerceAtLeast(0L), content))
             }
         }
         return when {

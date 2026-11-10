@@ -5,13 +5,16 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import com.app.musicplayer.data.Song
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 
 /**
  * Finds lyrics for a song, in this order:
@@ -41,10 +44,27 @@ class LyricsRepository(private val ctx: Context) {
         index = null
     }
 
-    /** Copies a user-picked .lrc / .txt into app storage for this song. */
-    fun importFor(songId: Long, uri: Uri) {
-        val bytes = ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return
-        File(dir, "$songId.lrc").writeBytes(bytes)
+    /** Copies a validated, size-limited .lrc / .txt into app storage for this song. */
+    fun importFor(songId: Long, uri: Uri): Boolean {
+        if (songId < 0L) return false
+        val name = runCatching {
+            ctx.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull()
+        val mime = runCatching { ctx.contentResolver.getType(uri) }.getOrNull()
+        val supportedName = name?.lowercase()?.let { it.endsWith(".lrc") || it.endsWith(".txt") } == true
+        if (!supportedName && mime?.startsWith("text/", ignoreCase = true) != true) return false
+
+        val bytes = runCatching {
+            ctx.contentResolver.openInputStream(uri)?.use { readLimited(it) }
+        }.getOrNull() ?: return false
+        if (Lrc.parse(decode(bytes)) == null) return false
+        return runCatching {
+            dir.mkdirs()
+            File(dir, "$songId.lrc").writeBytes(bytes)
+            true
+        }.getOrDefault(false)
     }
 
     fun removeFor(songId: Long) { File(dir, "$songId.lrc").delete() }
@@ -54,14 +74,14 @@ class LyricsRepository(private val ctx: Context) {
 
         val own = File(dir, "${song.id}.lrc")
         if (own.exists()) {
-            val l = runCatching { Lrc.parse(decode(own.readBytes())) }.getOrNull()
+            val l = runCatching { own.inputStream().use { readLimited(it)?.let { bytes -> Lrc.parse(decode(bytes)) } } }.getOrNull()
             if (l != null) return@withContext l
         }
 
         if (Build.VERSION.SDK_INT <= 29 && song.folder.isNotBlank() && song.fileName.isNotBlank()) {
             val side = File(song.folder, song.fileName.substringBeforeLast('.') + ".lrc")
             if (side.canRead()) {
-                val l = runCatching { Lrc.parse(decode(side.readBytes())) }.getOrNull()
+                val l = runCatching { side.inputStream().use { readLimited(it)?.let { bytes -> Lrc.parse(decode(bytes)) } } }.getOrNull()
                 if (l != null) return@withContext l
             }
         }
@@ -69,7 +89,9 @@ class LyricsRepository(private val ctx: Context) {
         val fromTree = runCatching { findInTree(song) }.getOrNull()
         if (fromTree != null) {
             val l = runCatching {
-                ctx.contentResolver.openInputStream(fromTree)?.use { Lrc.parse(decode(it.readBytes())) }
+                ctx.contentResolver.openInputStream(fromTree)?.use { input ->
+                    readLimited(input)?.let { Lrc.parse(decode(it)) }
+                }
             }.getOrNull()
             if (l != null) return@withContext l
         }
@@ -136,6 +158,25 @@ class LyricsRepository(private val ctx: Context) {
             }
         }
         return out
+    }
+
+    private companion object {
+        const val MAX_LYRICS_BYTES = 2 * 1024 * 1024
+    }
+
+    /** Reads at most 2 MiB, including for providers that do not report a content length. */
+    private fun readLimited(input: InputStream): ByteArray? {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            if (total > MAX_LYRICS_BYTES) return null
+            output.write(buffer, 0, count)
+        }
+        return output.toByteArray()
     }
 
     private fun norm(s: String): String =

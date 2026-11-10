@@ -1,5 +1,6 @@
 package com.app.musicplayer.ui.screens
 
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -38,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -58,6 +60,7 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val song = ui.song
     val accent = MaterialTheme.colorScheme.primary
+    val context = LocalContext.current
     var reload by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var offsetMs by remember { mutableLongStateOf(0L) }
@@ -68,7 +71,10 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
         loading = false
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null && song != null) vm.importLyrics(song.id, uri) { reload++ }
+        if (uri != null && song != null) vm.importLyrics(song.id, uri) { imported ->
+            if (imported) reload++
+            else Toast.makeText(context, "Choose a valid .lrc/.txt text file under 2 MB.", Toast.LENGTH_LONG).show()
+        }
     }
 
     val pos = ui.positionMs + offsetMs
@@ -99,7 +105,7 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    TextButton(onClick = { picker.launch(arrayOf("*/*")) }) { Text("Load .lrc") }
+                    TextButton(onClick = { picker.launch(arrayOf("*/*")) }) { Text("Load lyrics") }
                 }
 
                 val l = lyrics
@@ -115,14 +121,14 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
-                            "No lyrics found for this song.\n\nLoad an .lrc file for it, or choose a folder with your .lrc files in Settings (names should match the songs).",
+                            "No lyrics found for this song.\n\nLoad an .lrc/.txt file for it, or choose a folder with your .lrc files in Settings (names should match the songs).",
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.055f), RoundedCornerShape(22.dp))
                                 .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(22.dp)).padding(22.dp),
                         )
                         Button(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.padding(top = 20.dp)) {
-                            Text("Load .lrc for this song")
+                            Text("Load .lrc/.txt for this song")
                         }
                     }
                     else -> {
