@@ -190,9 +190,9 @@ fun PlayerScreen(vm: PlayerViewModel) {
 
                 GlassCard(Modifier.fillMaxWidth()) {
                     ProgressBar(ui.positionMs, ui.durationMs, accent, vm::seekTo)
-                    if (ui.playbackError != null) {
+                    ui.playbackError?.let { playbackError ->
                         Text(
-                            ui.playbackError,
+                            playbackError,
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
