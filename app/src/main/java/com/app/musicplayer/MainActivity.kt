@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.PlayCircle
@@ -48,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.app.musicplayer.ui.PlayerViewModel
 import com.app.musicplayer.ui.screens.EqualizerScreen
+import com.app.musicplayer.ui.screens.AssistantScreen
 import com.app.musicplayer.ui.screens.HomeScreen
 import com.app.musicplayer.ui.screens.LibraryScreen
 import com.app.musicplayer.ui.screens.PlayerScreen
@@ -89,6 +91,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
         Tab("EQ", Icons.Rounded.GraphicEq),
         Tab("Playlists", Icons.AutoMirrored.Rounded.QueueMusic),
         Tab("Videos", Icons.Rounded.VideoLibrary),
+        Tab("AI", Icons.Rounded.AutoAwesome),
         Tab("Share", Icons.Rounded.Share),
     )
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -137,6 +140,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                         3 -> EqualizerScreen(vm.fx)
                         4 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 2 })
                         5 -> VideosScreen(vm)
+                        6 -> AssistantScreen(vm, onOpenPlayer = { tab = 2 })
                         else -> ShareScreen(vm)
                     }
                 }
