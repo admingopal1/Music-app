@@ -14,7 +14,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
-/** Accent colours the user can pick in Settings (first one is the VLC-style orange default). */
+/** Accent colours available in Settings; the default follows the app's premium violet identity. */
 val ACCENT_CHOICES = listOf(
     Color(0xFFFF8800), // orange
     Color(0xFFE53935), // red
@@ -23,7 +23,7 @@ val ACCENT_CHOICES = listOf(
     Color(0xFF8E7CFF), // purple
     Color(0xFFEC407A), // pink
 )
-val DefaultAccent = ACCENT_CHOICES[0]
+val DefaultAccent = ACCENT_CHOICES[4]
 
 private val TextHigh = Color(0xFFEDEAF6)
 private val TextMid = Color(0xFFB9B4C8)
