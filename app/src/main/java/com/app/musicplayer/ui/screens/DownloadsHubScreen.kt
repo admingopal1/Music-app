@@ -270,8 +270,12 @@ fun DownloadsHubScreen() {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(item.title, maxLines = 2, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                         Text(item.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                        if (item.status == "Failed" && item.failureReason.isNotBlank()) {
-                            Text(item.failureReason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        if ((item.status == "Failed" || item.status == "Paused") && item.failureReason.isNotBlank()) {
+                            Text(
+                                item.failureReason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (item.status == "Failed") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         if (item.total > 0) {
                             val progress = (item.downloaded.toFloat() / item.total.toFloat()).coerceIn(0f, 1f)
@@ -414,7 +418,7 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
                 DownloadManager.STATUS_FAILED -> "Failed"
                 else -> "Unknown"
             }
-            val failureReason = if (status == "Failed" && reasonCol >= 0) {
+            val failureReason = if ((status == "Failed" || status == "Paused") && reasonCol >= 0) {
                 when (c.getInt(reasonCol)) {
                     DownloadManager.ERROR_FILE_ERROR -> "Storage or file error"
                     DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Server returned an unsupported HTTP response"
@@ -424,10 +428,11 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
                     DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Download storage is unavailable"
                     DownloadManager.ERROR_CANNOT_RESUME -> "Download cannot resume; try again"
                     DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "A file with this name already exists"
+                    DownloadManager.PAUSED_WAITING_TO_RETRY -> "Connection interrupted — Android will retry automatically"
                     DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "Waiting for a network connection"
                     DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "Waiting for Wi-Fi"
-                    DownloadManager.PAUSED_UNKNOWN -> "Download paused"
-                    else -> "Download failed (code " + c.getInt(reasonCol) + ")"
+                    DownloadManager.PAUSED_UNKNOWN -> "Download paused by Android"
+                    else -> if (status == "Paused") "Download temporarily paused" else "Download failed (code " + c.getInt(reasonCol) + ")"
                 }
             } else ""
             out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, c.getLong(bytesCol), c.getLong(totalCol), if (uriCol >= 0) c.getString(uriCol).orEmpty() else "", failureReason)
