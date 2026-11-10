@@ -44,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -126,7 +127,11 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                 }
             },
         ) { inner ->
-            Box(Modifier.fillMaxSize().padding(inner).statusBarsPadding()) {
+            Box(
+                Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), Color(0xFF080810)))
+                ).padding(inner).statusBarsPadding()
+            ) {
                 AnimatedContent(
                     targetState = tab,
                     transitionSpec = { fadeIn(tween(260)) togetherWith fadeOut(tween(160)) },
