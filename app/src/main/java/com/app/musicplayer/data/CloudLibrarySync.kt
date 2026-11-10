@@ -154,7 +154,7 @@ class CloudLibrarySync(
         // snapshot used for this merge. A competing device forces a full re-read/re-merge.
         val committed = db.runTransaction { transaction ->
             val latestSnapshot = transaction.get(libraryDoc)
-            if (latestSnapshot.updateTime != remoteSnapshot.updateTime) {
+            if (latestSnapshot.data != remoteSnapshot.data) {
                 false
             } else {
                 transaction.set(libraryDoc, payload)
