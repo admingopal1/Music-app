@@ -133,7 +133,12 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
     fun startPreview() {
         stopPreview()
         if (vm.ui.value.isPlaying) vm.togglePlay()
-        val mp = runCatching { MediaPlayer().apply { setDataSource(ctx, song.uri); prepare() } }.getOrNull() ?: return
+        val mp = MediaPlayer()
+        if (runCatching { mp.setDataSource(ctx, song.uri); mp.prepare() }.isFailure) {
+            mp.release()
+            Toast.makeText(ctx, "Can't preview this song", Toast.LENGTH_SHORT).show()
+            return
+        }
         player.value = mp
         mp.seekTo(startMs.toInt())
         mp.start()
