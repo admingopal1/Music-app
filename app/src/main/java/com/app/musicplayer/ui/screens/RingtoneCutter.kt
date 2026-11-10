@@ -203,6 +203,7 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
     }
     fun save(setDefault: Boolean) {
         if (setDefault && !RingtoneEngine.canSetDefault(ctx)) {
+            stopPreview()
             Toast.makeText(ctx, "Allow \"Modify system settings\", then tap Save & set default again.", Toast.LENGTH_LONG).show()
             runCatching {
                 ctx.startActivity(
