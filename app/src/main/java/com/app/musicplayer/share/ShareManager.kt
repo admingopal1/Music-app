@@ -53,7 +53,7 @@ class ShareManager private constructor(context: Context) {
     private val failures = HashMap<String, Pair<Int, Long>>()
 
     private var server: ShareServer? = null
-    private var pin = ""
+    @Volatile private var pin = ""
     @Volatile private var accepting = false
 
     // ------------------------------------------------------------------ small helpers
@@ -279,7 +279,11 @@ class ShareManager private constructor(context: Context) {
                 }
                 val resolver = app.contentResolver
                 val uri = resolver.insert(collection, values) ?: return null
-                val out = resolver.openOutputStream(uri) ?: return null
+                val out = resolver.openOutputStream(uri)
+                if (out == null) {
+                    resolver.delete(uri, null, null)
+                    return null
+                }
                 Incoming(
                     uri, out,
                     finish = {
@@ -344,6 +348,7 @@ class ShareManager private constructor(context: Context) {
                 copy(status = if (wasCancelled) Status.CANCELLED else Status.FAILED, speedBps = 0, error = if (wasCancelled) null else e.message)
             }
         } finally {
+            cancelled.remove(item.id)
             maybeStopService()
         }
         return ok
@@ -408,7 +413,11 @@ class ShareManager private constructor(context: Context) {
     }
 
     private fun sendOne(peer: Peer, pin: String, f: OutFile, id: Long) {
-        if (id in cancelled) return
+        if (id in cancelled) {
+            cancelled.remove(id)
+            maybeStopService()
+            return
+        }
         setItem(id) { copy(status = Status.ACTIVE) }
         var conn: HttpURLConnection? = null
         try {
@@ -455,6 +464,7 @@ class ShareManager private constructor(context: Context) {
         } finally {
             connections.remove(id)
             conn?.disconnect()
+            cancelled.remove(id)
             maybeStopService()
         }
     }
