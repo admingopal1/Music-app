@@ -2,7 +2,6 @@ package com.app.musicplayer.data
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.tasks.await
 
 /**
@@ -122,10 +121,9 @@ class CloudLibrarySync(
             "Cloud library is too large for the safe Firestore document limit. Use local Backup/Restore for the full library."
         }
 
-        libraryDoc.set(
-            payload,
-            SetOptions.merge(),
-        ).await()
+        // Replace this dedicated library document so removed playlists and
+        // pruned tombstones are actually removed (merge would retain stale map keys).
+        libraryDoc.set(payload).await()
 
         // Merge remote entries back into this device, matching by track metadata.
         val index = songs.groupBy { trackKey(it) }
