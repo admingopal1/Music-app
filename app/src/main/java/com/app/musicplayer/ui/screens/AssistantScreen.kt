@@ -1,6 +1,7 @@
 package com.app.musicplayer.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -131,7 +132,11 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                 Text("Private · On-device · No account required", color = Color.White.copy(0.65f), style = MaterialTheme.typography.labelSmall)
             }
         }
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(18.dp)) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2041).copy(alpha = 0.92f)),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(20.dp)),
+        ) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -152,7 +157,11 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                 cloudMessage?.let { Text(it, color = Color(0xFFE3A7FF), style = MaterialTheme.typography.bodySmall) }
             }
         }
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.10f)), shape = RoundedCornerShape(22.dp)) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF302247).copy(alpha = 0.96f)),
+            shape = RoundedCornerShape(22.dp),
+            modifier = Modifier.border(1.dp, Color(0xFFE3A7FF).copy(alpha = 0.16f), RoundedCornerShape(22.dp)),
+        ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("What should we play?", color = Color.White, fontWeight = FontWeight.Bold)
                 Text(answer, color = Color.White.copy(0.82f), style = MaterialTheme.typography.bodyMedium)
@@ -187,7 +196,9 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(selected, key = { it.id }) { song ->
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White.copy(0.09f))
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                            .background(Color.White.copy(0.065f))
+                            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
                             .clickable { vm.playSongs(selected, selected.indexOf(song)); onOpenPlayer() }.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
