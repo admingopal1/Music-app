@@ -66,6 +66,7 @@ private data class DownloadRow(
     val downloaded: Long,
     val total: Long,
     val sourceUri: String,
+    val failureReason: String,
 )
 
 @Composable
@@ -263,6 +264,9 @@ fun DownloadsHubScreen() {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(item.title, maxLines = 2, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                         Text(item.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        if (item.status == "Failed" && item.failureReason.isNotBlank()) {
+                            Text(item.failureReason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                        }
                         if (item.total > 0) {
                             val progress = (item.downloaded.toFloat() / item.total.toFloat()).coerceIn(0f, 1f)
                             androidx.compose.material3.LinearProgressIndicator(
@@ -356,6 +360,7 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
         val bytesCol = c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
         val totalCol = c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
         val uriCol = c.getColumnIndex(DownloadManager.COLUMN_URI)
+        val reasonCol = c.getColumnIndex(DownloadManager.COLUMN_REASON)
         val out = mutableListOf<DownloadRow>()
         while (c.moveToNext()) {
             val status = when (c.getInt(statusCol)) {
@@ -366,7 +371,23 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
                 DownloadManager.STATUS_FAILED -> "Failed"
                 else -> "Unknown"
             }
-            out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, c.getLong(bytesCol), c.getLong(totalCol), if (uriCol >= 0) c.getString(uriCol).orEmpty() else "")
+            val failureReason = if (status == "Failed" && reasonCol >= 0) {
+                when (c.getInt(reasonCol)) {
+                    DownloadManager.ERROR_FILE_ERROR -> "Storage or file error"
+                    DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Server returned an unsupported HTTP response"
+                    DownloadManager.ERROR_HTTP_DATA_ERROR -> "Network data error"
+                    DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Too many redirects"
+                    DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Not enough storage space"
+                    DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Download storage is unavailable"
+                    DownloadManager.ERROR_CANNOT_RESUME -> "Download cannot resume; try again"
+                    DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "A file with this name already exists"
+                    DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "Waiting for a network connection"
+                    DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "Waiting for Wi-Fi"
+                    DownloadManager.PAUSED_UNKNOWN -> "Download paused"
+                    else -> "Download failed (code " + c.getInt(reasonCol) + ")"
+                }
+            } else ""
+            out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, c.getLong(bytesCol), c.getLong(totalCol), if (uriCol >= 0) c.getString(uriCol).orEmpty() else "", failureReason)
         }
         out.sortedByDescending { it.id }.take(30)
     }
