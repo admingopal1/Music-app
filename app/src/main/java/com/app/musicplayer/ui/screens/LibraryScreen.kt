@@ -80,6 +80,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
     var sortMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var ringtoneFor by remember { mutableStateOf<Song?>(null) }
     var showStream by remember { mutableStateOf(false) }
 
     val sorted = remember(songs, query, sortIdx) {
@@ -225,6 +226,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                         onPlayNext = { vm.playNext(song) },
                         onAddToQueue = { vm.addToQueue(song) },
                         onRadio = { vm.startAiRadio(song); onOpenPlayer() },
+                        onRingtone = { ringtoneFor = song },
                         onAddToPlaylist = { vm.playlists.addSong(it, song.id) },
                     )
                 }
@@ -233,6 +235,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     }
 
     if (showSettings) SettingsDialog(vm) { showSettings = false }
+    ringtoneFor?.let { RingtoneCutterDialog(vm, it) { ringtoneFor = null } }
     if (showStream) StreamDialog(onPlay = { vm.playUrl(it); onOpenPlayer() }) { showStream = false }
 }
 
@@ -275,7 +278,7 @@ private fun GroupRow(title: String, subtitle: String, count: Int, onClick: () ->
 private fun SongRow(
     song: Song, current: Boolean, favorite: Boolean, playlistNames: List<String>,
     onClick: () -> Unit, onFavorite: () -> Unit, onPlayNext: () -> Unit, onAddToQueue: () -> Unit,
-    onRadio: () -> Unit, onAddToPlaylist: (String) -> Unit,
+    onRadio: () -> Unit, onRingtone: () -> Unit, onAddToPlaylist: (String) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -316,6 +319,7 @@ private fun SongRow(
                 DropdownMenuItem(text = { Text("Play next") }, onClick = { onPlayNext(); menu = false })
                 DropdownMenuItem(text = { Text("Add to queue") }, onClick = { onAddToQueue(); menu = false })
                 DropdownMenuItem(text = { Text("Start AI radio (similar songs)") }, onClick = { onRadio(); menu = false })
+                DropdownMenuItem(text = { Text("Make ringtone (AI cutter)") }, onClick = { onRingtone(); menu = false })
                 if (playlistNames.isEmpty()) {
                     DropdownMenuItem(text = { Text("Create a playlist first") }, onClick = { menu = false }, enabled = false)
                 } else {
