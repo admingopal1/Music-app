@@ -38,6 +38,7 @@ class CloudLibrarySync(
                     "rating" to stat.rating,
                     "plays" to stat.plays,
                     "lastPlayed" to stat.lastPlayed,
+                    "updatedAt" to stat.updatedAt,
                 )
             }
         }.toMap()
@@ -71,10 +72,14 @@ class CloudLibrarySync(
             val track = newTrack ?: oldTrack ?: return@forEach
             val oldRating = (old["rating"] as? Number)?.toInt() ?: 0
             val newRating = (fresh["rating"] as? Number)?.toInt() ?: 0
+            val oldUpdatedAt = (old["updatedAt"] as? Number)?.toLong() ?: 0L
+            val newUpdatedAt = (fresh["updatedAt"] as? Number)?.toLong() ?: 0L
+            val preferLocal = fresh.isNotEmpty() && newUpdatedAt >= oldUpdatedAt
             mergedStats[key] = mapOf(
                 "track" to track,
-                "favorite" to if (fresh.containsKey("favorite")) ((fresh["favorite"] as? Boolean) == true) else ((old["favorite"] as? Boolean) == true),
-                "rating" to if (fresh.containsKey("rating")) newRating else oldRating,
+                "favorite" to if (preferLocal) ((fresh["favorite"] as? Boolean) == true) else ((old["favorite"] as? Boolean) == true),
+                "rating" to if (preferLocal) newRating else oldRating,
+                "updatedAt" to maxOf(oldUpdatedAt, newUpdatedAt),
                 "plays" to maxOf((old["plays"] as? Number)?.toInt() ?: 0, (fresh["plays"] as? Number)?.toInt() ?: 0),
                 "lastPlayed" to maxOf((old["lastPlayed"] as? Number)?.toLong() ?: 0L, (fresh["lastPlayed"] as? Number)?.toLong() ?: 0L),
             )
@@ -122,6 +127,7 @@ class CloudLibrarySync(
                 rating = rating.coerceIn(0, 5),
                 plays = maxOf(current.plays, (value["plays"] as? Number)?.toInt() ?: 0),
                 lastPlayed = maxOf(current.lastPlayed, (value["lastPlayed"] as? Number)?.toLong() ?: 0L),
+                updatedAt = maxOf(current.updatedAt, (value["updatedAt"] as? Number)?.toLong() ?: 0L),
             )
         }
         stats.putAll(updates)
