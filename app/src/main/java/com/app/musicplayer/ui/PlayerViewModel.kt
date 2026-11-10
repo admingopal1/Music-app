@@ -44,6 +44,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -105,9 +108,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val backup = BackupManager(ctx)
     private val cloudLibrarySync = CloudLibrarySync()
-    private var automaticSyncStarted = false
+    private var libraryLoaded = false
+    private var autoSyncJob: Job? = null
     private val _cloudSyncStatus = MutableStateFlow<String?>(null)
     val cloudSyncStatus: StateFlow<String?> = _cloudSyncStatus.asStateFlow()
+    private val auth = FirebaseAuth.getInstance()
+    private val authListener = FirebaseAuth.AuthStateListener { state ->
+        if (state.currentUser != null) scheduleAutomaticCloudSync()
+        else _cloudSyncStatus.value = "Sign in to enable cloud library sync."
+    }
     private val _backupMsg = MutableStateFlow<String?>(null)
     val backupMessage: StateFlow<String?> = _backupMsg.asStateFlow()
     private val _fadeSecs = MutableStateFlow(prefs.getFloat("fade_secs", 0f))
@@ -141,7 +150,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         _accent.value = baseAccent()
+        auth.addAuthStateListener(authListener)
         connect()
+        // Debounced foreground sync for playlist/favourite/rating/play-history changes.
+        viewModelScope.launch {
+            combine(playlists.lists, stats.stats) { _, _ -> Unit }
+                .drop(1)
+                .debounce(12_000)
+                .collect { scheduleAutomaticCloudSync() }
+        }
         viewModelScope.launch {
             while (true) {
                 val abActive = _abA.value >= 0 && _abB.value > _abA.value
@@ -248,18 +265,32 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             songById = list.associateBy { it.id }
             _songs.value = list
             refreshUi()
-            // One automatic sync after sign-in and initial library scan per app session.
-            if (!automaticSyncStarted && FirebaseAuth.getInstance().currentUser != null) {
-                automaticSyncStarted = true
-                _cloudSyncStatus.value = "Syncing your library…"
-                runCatching { cloudLibrarySync.sync(list, playlists, stats) }
-                    .onSuccess { _cloudSyncStatus.value = it }
-                    .onFailure { _cloudSyncStatus.value = "Automatic sync unavailable: ${it.localizedMessage ?: "check internet and Firestore rules"}" }
-            }
+            libraryLoaded = true
+            scheduleAutomaticCloudSync()
+        }
+    }
+
+    private fun scheduleAutomaticCloudSync() {
+        if (!libraryLoaded || auth.currentUser == null) return
+        autoSyncJob?.cancel()
+        autoSyncJob = viewModelScope.launch {
+            delay(1_200)
+            _cloudSyncStatus.value = "Syncing your library…"
+            runCatching { cloudLibrarySync.sync(_songs.value, playlists, stats) }
+                .onSuccess { _cloudSyncStatus.value = it }
+                .onFailure {
+                    _cloudSyncStatus.value = "Automatic sync unavailable: ${it.localizedMessage ?: "check internet and Firestore rules"}"
+                }
         }
     }
 
     suspend fun syncCloudLibrary(): String = cloudLibrarySync.sync(_songs.value, playlists, stats)
+
+    override fun onCleared() {
+        auth.removeAuthStateListener(authListener)
+        autoSyncJob?.cancel()
+        super.onCleared()
+    }
 
     fun songById(id: Long): Song? = songById[id]
 
