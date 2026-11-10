@@ -280,13 +280,14 @@ fun DownloadsHubScreen() {
                                 TextButton(onClick = {
                                     runCatching {
                                         val parsed = Uri.parse(item.sourceUri)
+                                        val retryName = uniqueRetryFileName(item.title)
                                         val request = DownloadManager.Request(parsed)
                                             .setTitle(item.title)
                                             .setDescription("Retrying download to Downloads/MusicPlayer")
                                             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                                             .setAllowedOverMetered(true)
                                             .setAllowedOverRoaming(false)
-                                            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "MusicPlayer/${item.title}")
+                                            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "MusicPlayer/$retryName")
                                         val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
                                         manager.enqueue(request)
                                         refresh()
@@ -330,6 +331,16 @@ fun DownloadsHubScreen() {
             }
         }
     }
+}
+
+private fun uniqueRetryFileName(title: String): String {
+    val decoded = runCatching { URLDecoder.decode(title, "UTF-8") }.getOrDefault(title)
+    val safe = decoded.replace(Regex("[^A-Za-z0-9._ -]"), "_")
+        .trim().trim('.').take(90).ifBlank { "media" }
+    val dot = safe.lastIndexOf('.')
+    val base = if (dot > 0) safe.substring(0, dot) else safe
+    val extension = if (dot > 0) safe.substring(dot) else ""
+    return "${base.take(70)}-retry-${System.currentTimeMillis()}$extension"
 }
 
 private fun queryDownloads(context: Context): List<DownloadRow> {
