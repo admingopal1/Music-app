@@ -82,7 +82,7 @@ class StatsStore(ctx: Context) {
     /** Tapping the same star again clears the rating. */
     fun setRating(id: Long, rating: Int) = synchronized(lock) {
         val s = _stats.value[id] ?: SongStats()
-        saveLocked(id, s.copy(rating = if (s.rating == rating) 0 else rating.coerceIn(0, 5))
+        saveLocked(id, s.copy(rating = if (s.rating == rating) 0 else rating.coerceIn(0, 5)))
     }
 
     fun recordPlay(id: Long) = synchronized(lock) {
