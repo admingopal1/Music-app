@@ -45,4 +45,11 @@ class PlaybackOptionsTest {
         assertEquals(0.2f, PlaybackOptions.sleepVolume(0.4f, 7_500L), 0.0001f)
         assertEquals(0f, PlaybackOptions.sleepVolume(0.4f, 0L), 0.0001f)
     }
+
+    @Test fun sleepVolumeNeverReturnsNonFiniteOrOutOfRangeValues() {
+        assertEquals(1f, PlaybackOptions.sleepVolume(Float.NaN, 30_000L), 0.0001f)
+        assertEquals(1f, PlaybackOptions.sleepVolume(Float.POSITIVE_INFINITY, 30_000L), 0.0001f)
+        assertEquals(0f, PlaybackOptions.sleepVolume(-4f, 30_000L), 0.0001f)
+        assertEquals(1f, PlaybackOptions.sleepVolume(4f, 30_000L), 0.0001f)
+    }
 }
