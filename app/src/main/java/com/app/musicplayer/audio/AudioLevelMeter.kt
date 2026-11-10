@@ -11,7 +11,6 @@ import java.nio.ByteOrder
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -62,7 +61,9 @@ class AudioLevelProcessor : BaseAudioProcessor() {
         val output = replaceOutputBuffer(size)
         if (encoding == C.ENCODING_PCM_16BIT || encoding == C.ENCODING_PCM_FLOAT) {
             val samples = inputBuffer.asReadOnlyBuffer().order(ByteOrder.nativeOrder())
-            while (samples.remaining() >= channelCount * if (encoding == C.ENCODING_PCM_16BIT) 2 else 4) {
+            val bytesPerSample = if (encoding == C.ENCODING_PCM_16BIT) 2 else 4
+            val bytesPerFrame = channelCount * bytesPerSample
+            while (samples.remaining() >= bytesPerFrame) {
                 var mono = 0f
                 repeat(channelCount) {
                     mono += if (encoding == C.ENCODING_PCM_16BIT) {
@@ -91,8 +92,8 @@ class AudioLevelProcessor : BaseAudioProcessor() {
         val values = FloatArray(bandCount)
         val maxBin = fftSize / 2
         for (band in 0 until bandCount) {
-            val start = max(1, (1.0 * (maxBin - 1).pow(band.toDouble() / bandCount)).toInt())
-            val end = max(start + 1, (1.0 * (maxBin - 1).pow((band + 1.0) / bandCount)).toInt())
+            val start = max(1, ((maxBin - 1).toDouble().pow(band.toDouble() / bandCount)).toInt())
+            val end = max(start + 1, ((maxBin - 1).toDouble().pow((band + 1.0) / bandCount)).toInt())
                 .coerceAtMost(maxBin)
             var energy = 0f
             for (bin in start until end) {
