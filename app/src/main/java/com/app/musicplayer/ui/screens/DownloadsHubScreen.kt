@@ -6,6 +6,8 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
+import com.app.musicplayer.download.DirectMediaUrlResult
+import com.app.musicplayer.download.DirectMediaUrlValidator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
@@ -57,7 +59,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.net.URLDecoder
-import java.util.Locale
 
 private data class DownloadRow(
     val id: Long,
@@ -96,32 +97,26 @@ fun DownloadsHubScreen() {
     }
 
     fun startDownload() {
-        val parsed = runCatching { Uri.parse(url.trim()) }.getOrNull()
-        val scheme = parsed?.scheme?.lowercase(Locale.ROOT)
-        if (parsed == null || scheme !in listOf("http", "https") || parsed.host.isNullOrBlank()) {
-            Toast.makeText(context, "Enter a valid http/https media URL", Toast.LENGTH_LONG).show()
-            return
+        val validation = DirectMediaUrlValidator.validate(url)
+        when (validation) {
+            is DirectMediaUrlResult.Invalid -> {
+                Toast.makeText(context, validation.message, Toast.LENGTH_LONG).show()
+                return
+            }
+            is DirectMediaUrlResult.Social -> {
+                platformHint = "${validation.platform} post link detected. This is a post page, not a direct media file. Open it in the official site/app. Downloads work when the creator provides an accessible direct media URL or you own and export the file. Private/restricted posts are not bypassed."
+                Toast.makeText(context, "Social post link detected — see the note below", Toast.LENGTH_LONG).show()
+                return
+            }
+            is DirectMediaUrlResult.Valid -> Unit
         }
-        val host = parsed.host.orEmpty().lowercase(Locale.ROOT)
-        if (host.contains("instagram.com") || host.contains("facebook.com") || host.contains("fb.watch")) {
-            platformHint = when {
-                host.contains("instagram.com") -> "Instagram post link detected."
-                else -> "Facebook video link detected."
-            } + " This is a post page, not a direct media file. Open it in the official site/app. Downloads work when the creator provides an accessible direct media URL or you own and export the file. Private/restricted posts are not bypassed."
-            Toast.makeText(context, "Social post link detected — see the note below", Toast.LENGTH_LONG).show()
-            return
-        }
-        val path = parsed.lastPathSegment.orEmpty().lowercase(Locale.ROOT)
-        val allowed = listOf(".mp4", ".webm", ".mkv", ".mov", ".m4v", ".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac")
-        if (allowed.none { path.endsWith(it) }) {
-            Toast.makeText(context, "Use a direct MP4, WebM, MOV or audio-file URL. Web pages and streaming playlists are not direct files.", Toast.LENGTH_LONG).show()
-            return
-        }
+        val validUrl = validation as DirectMediaUrlResult.Valid
+        val parsed = Uri.parse(validUrl.url)
         if (hasActiveDownload(context, parsed.toString())) {
             Toast.makeText(context, "This media URL is already queued or downloading", Toast.LENGTH_LONG).show()
             return
         }
-        val rawName = parsed.lastPathSegment?.let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrNull() }.orEmpty()
+        val rawName = runCatching { URLDecoder.decode(validUrl.fileName, "UTF-8") }.getOrNull().orEmpty()
         val requestedName = rawName.replace(Regex("[^A-Za-z0-9._ -]"), "_").trim().trim('.').take(100)
             .ifBlank { "media_${System.currentTimeMillis()}.mp4" }
         val safeName = uniqueDownloadFileName(context, requestedName)
