@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +57,7 @@ fun VideosScreen(vm: PlayerViewModel) {
     val ctx = LocalContext.current
     val videos by vm.videos.collectAsStateWithLifecycle()
     var query by rememberSaveable { mutableStateOf("") }
+    var showDownloads by rememberSaveable { mutableStateOf(false) }
 
     val filtered = remember(videos, query) {
         if (query.isBlank()) videos
@@ -63,6 +65,16 @@ fun VideosScreen(vm: PlayerViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (showDownloads) TextButton(onClick = { showDownloads = false }) { Text("My videos") }
+            else Button(onClick = { showDownloads = false }) { Text("My videos") }
+            if (showDownloads) Button(onClick = { showDownloads = true }) { Text("Downloads") }
+            else TextButton(onClick = { showDownloads = true }) { Text("Downloads") }
+        }
+        if (showDownloads) {
+            DownloadsHubScreen()
+            return@Column
+        }
         Text(
             "Videos", style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(start = 20.dp, top = 12.dp, end = 20.dp),
