@@ -84,7 +84,7 @@ class CloudLibrarySync(
         )
         // Firestore documents are limited to 1 MiB. Keep a safety margin and fail
         // before writing rather than risking a rejected sync.
-        val estimatedBytes = org.json.JSONObject(payload).toString().toByteArray(Charsets.UTF_8).size
+        val estimatedBytes = org.json.JSONObject(mapOf("schemaVersion" to 1, "playlists" to mergedLists, "stats" to mergedStats)).toString().toByteArray(Charsets.UTF_8).size
         require(estimatedBytes <= 700_000) {
             "Cloud library is too large for the safe Firestore document limit. Use local Backup/Restore for the full library."
         }
