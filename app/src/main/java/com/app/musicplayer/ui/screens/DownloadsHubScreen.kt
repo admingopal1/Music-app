@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.net.URLDecoder
 import java.util.Locale
@@ -64,6 +65,7 @@ private data class DownloadRow(
     val status: String,
     val downloaded: Long,
     val total: Long,
+    val sourceUri: String,
 )
 
 @Composable
@@ -135,6 +137,13 @@ fun DownloadsHubScreen() {
     }
 
     androidx.compose.runtime.LaunchedEffect(Unit) { refresh() }
+    val hasActiveDownloads = rows.any { it.status == "Waiting" || it.status == "Downloading" || it.status == "Paused" }
+    androidx.compose.runtime.LaunchedEffect(hasActiveDownloads) {
+        while (hasActiveDownloads) {
+            delay(1_500)
+            rows = withContext(Dispatchers.IO) { queryDownloads(context) }
+        }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background))),
@@ -267,6 +276,28 @@ fun DownloadsHubScreen() {
                             )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (item.status == "Failed" && item.sourceUri.isNotBlank()) {
+                                TextButton(onClick = {
+                                    runCatching {
+                                        val parsed = Uri.parse(item.sourceUri)
+                                        val request = DownloadManager.Request(parsed)
+                                            .setTitle(item.title)
+                                            .setDescription("Retrying download to Downloads/MusicPlayer")
+                                            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                            .setAllowedOverMetered(true)
+                                            .setAllowedOverRoaming(false)
+                                            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "MusicPlayer/${item.title}")
+                                        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                        manager.enqueue(request)
+                                        refresh()
+                                    }.onFailure {
+                                        Toast.makeText(context, "Retry failed: ${it.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }) {
+                                    Icon(Icons.Rounded.Refresh, contentDescription = null)
+                                    Text("Retry")
+                                }
+                            }
                             if (item.status == "Completed") {
                                 TextButton(onClick = {
                                     val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -313,6 +344,7 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
         val statusCol = c.getColumnIndex(DownloadManager.COLUMN_STATUS)
         val bytesCol = c.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
         val totalCol = c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+        val uriCol = c.getColumnIndex(DownloadManager.COLUMN_URI)
         val out = mutableListOf<DownloadRow>()
         while (c.moveToNext()) {
             val status = when (c.getInt(statusCol)) {
@@ -323,7 +355,7 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
                 DownloadManager.STATUS_FAILED -> "Failed"
                 else -> "Unknown"
             }
-            out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, c.getLong(bytesCol), c.getLong(totalCol))
+            out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, c.getLong(bytesCol), c.getLong(totalCol), if (uriCol >= 0) c.getString(uriCol).orEmpty() else "")
         }
         out.sortedByDescending { it.id }.take(30)
     }
