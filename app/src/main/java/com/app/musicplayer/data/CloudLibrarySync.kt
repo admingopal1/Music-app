@@ -24,6 +24,7 @@ class CloudLibrarySync(
         val userDoc = db.collection("users").document(user.uid)
         val libraryDoc = userDoc.collection("private").document("library")
         val localLists = playlists.lists.value
+        val localDeletedNames = playlists.deletedNames.value
         val localStats = stats.stats.value
 
         val localPlaylistPayload = localLists.mapValues { (_, ids) ->
@@ -44,8 +45,11 @@ class CloudLibrarySync(
         // A single bounded document avoids write-per-track costs on the free tier.
         val remote = libraryDoc.get().await().data ?: emptyMap<String, Any>()
         val remoteLists = remote["playlists"] as? Map<*, *> ?: emptyMap<Any, Any>()
+        val remoteDeletedNames = (remote["deletedPlaylists"] as? List<*>)?.mapNotNull { it as? String }?.toSet().orEmpty()
+        val mergedDeletedNames = remoteDeletedNames + localDeletedNames
         val mergedLists = LinkedHashMap<String, List<Map<String, Any>>>()
-        (remoteLists.keys.mapNotNull { it as? String } + localPlaylistPayload.keys).distinct().forEach { name ->
+        (remoteLists.keys.mapNotNull { it as? String } + localPlaylistPayload.keys).distinct()
+            .filterNot { it in mergedDeletedNames }.forEach { name ->
             val remoteTracks = remoteLists[name] as? List<*> ?: emptyList<Any>()
             val localTracks = localPlaylistPayload[name].orEmpty()
             val combined = LinkedHashMap<String, Map<String, Any>>()
@@ -79,12 +83,13 @@ class CloudLibrarySync(
         val payload = mapOf(
             "schemaVersion" to 1,
             "playlists" to mergedLists,
+            "deletedPlaylists" to mergedDeletedNames.toList(),
             "stats" to mergedStats,
             "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
         )
         // Firestore documents are limited to 1 MiB. Keep a safety margin and fail
         // before writing rather than risking a rejected sync.
-        val estimatedBytes = org.json.JSONObject(mapOf("schemaVersion" to 1, "playlists" to mergedLists, "stats" to mergedStats)).toString().toByteArray(Charsets.UTF_8).size
+        val estimatedBytes = org.json.JSONObject(mapOf("schemaVersion" to 1, "playlists" to mergedLists, "deletedPlaylists" to mergedDeletedNames.toList(), "stats" to mergedStats)).toString().toByteArray(Charsets.UTF_8).size
         require(estimatedBytes <= 700_000) {
             "Cloud library is too large for the safe Firestore document limit. Use local Backup/Restore for the full library."
         }
@@ -105,7 +110,7 @@ class CloudLibrarySync(
             val existing = restoredLists[name].orEmpty()
             restoredLists[name] = existing + ids.filterNot { it in existing }
         }
-        playlists.replaceAll(restoredLists)
+        playlists.applyCloudMerge(restoredLists, mergedDeletedNames)
 
         val updates = HashMap<Long, SongStats>()
         mergedStats.forEach { (key, value) ->
