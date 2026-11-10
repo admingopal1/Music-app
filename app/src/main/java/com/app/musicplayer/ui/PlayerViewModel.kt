@@ -289,12 +289,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun syncCloudLibrary(): String = cloudLibrarySync.sync(_songs.value, playlists, stats)
 
-    override fun onCleared() {
-        auth.removeAuthStateListener(authListener)
-        autoSyncJob?.cancel()
-        super.onCleared()
-    }
-
     fun songById(id: Long): Song? = songById[id]
 
     fun importLyrics(songId: Long, uri: Uri, done: () -> Unit) {
@@ -544,6 +538,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        auth.removeAuthStateListener(authListener)
+        autoSyncJob?.cancel()
         sleepJob?.cancel()
         sleepJob = null
         _sleepLeft.value = 0L
