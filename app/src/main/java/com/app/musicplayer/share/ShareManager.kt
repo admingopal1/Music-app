@@ -163,6 +163,10 @@ class ShareManager private constructor(context: Context) {
     fun checkPin(given: String, ip: String): Int {
         synchronized(failures) {
             val now = System.currentTimeMillis()
+            failures.entries.removeAll { now - it.value.second >= 60_000L }
+            if (ip !in failures && failures.size >= 512) {
+                failures.minByOrNull { it.value.second }?.key?.let(failures::remove)
+            }
             val f = failures[ip]
             val count = if (f != null && now - f.second < 60_000L) f.first else 0
             if (count >= 8) return 2
@@ -321,6 +325,7 @@ class ShareManager private constructor(context: Context) {
                     if (want <= 0) break
                     val n = input.read(buf, 0, want)
                     if (n < 0) break
+                    if (done + n > MAX_UPLOAD_BYTES) throw IOException("File exceeds the 2 GiB upload limit")
                     out.write(buf, 0, n)
                     done += n
                     tracker.add(done)
@@ -603,6 +608,7 @@ class ShareManager private constructor(context: Context) {
     }
 
     companion object {
+        const val MAX_UPLOAD_BYTES = 2L * 1024 * 1024 * 1024
         private const val SERVICE_TYPE = "_musicshare._tcp."
 
         @Volatile private var instance: ShareManager? = null
