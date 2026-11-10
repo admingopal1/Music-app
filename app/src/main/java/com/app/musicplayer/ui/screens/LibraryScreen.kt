@@ -117,7 +117,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     }
     val inGroupMode = mode in 1..3
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background)))) {
         Row(
             Modifier.fillMaxWidth().padding(start = 20.dp, top = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
