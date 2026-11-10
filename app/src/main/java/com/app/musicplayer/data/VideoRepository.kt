@@ -24,19 +24,29 @@ data class Video(
 
 object VideoRepository {
     suspend fun loadVideos(ctx: Context): List<Video> = withContext(Dispatchers.IO) {
-        val collection: Uri = if (Build.VERSION.SDK_INT >= 29)
+        val collection: Uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        }
 
-        val projection = arrayOf(
-            MediaStore.Video.Media._ID,
-            MediaStore.Video.Media.DISPLAY_NAME,
-            MediaStore.Video.Media.DURATION,
-            MediaStore.Video.Media.SIZE,
-            MediaStore.Video.Media.WIDTH,
-            MediaStore.Video.Media.HEIGHT,
-            MediaStore.Video.Media.DATA,
-        )
+        // RELATIVE_PATH is the scoped-storage friendly folder identifier on Android 10+.
+        // DATA is queried only on older Android versions where legacy filesystem paths
+        // are still needed to display the containing folder.
+        val projection = buildList {
+            add(MediaStore.Video.Media._ID)
+            add(MediaStore.Video.Media.DISPLAY_NAME)
+            add(MediaStore.Video.Media.DURATION)
+            add(MediaStore.Video.Media.SIZE)
+            add(MediaStore.Video.Media.WIDTH)
+            add(MediaStore.Video.Media.HEIGHT)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                add(MediaStore.Video.Media.RELATIVE_PATH)
+            } else {
+                @Suppress("DEPRECATION")
+                add(MediaStore.Video.Media.DATA)
+            }
+        }.toTypedArray()
         val order = "${MediaStore.Video.Media.DATE_ADDED} DESC"
 
         val out = ArrayList<Video>()
@@ -48,9 +58,25 @@ object VideoRepository {
                 val iSize = c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
                 val iW = c.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
                 val iH = c.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
-                val iData = c.getColumnIndex(MediaStore.Video.Media.DATA)
+                val iFolder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    c.getColumnIndex(MediaStore.Video.Media.RELATIVE_PATH)
+                } else {
+                    @Suppress("DEPRECATION")
+                    c.getColumnIndex(MediaStore.Video.Media.DATA)
+                }
+
                 while (c.moveToNext()) {
                     val id = c.getLong(iId)
+                    val folder = if (iFolder >= 0) {
+                        val value = c.getString(iFolder).orEmpty()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            value.trimEnd('/')
+                        } else {
+                            value.substringBeforeLast('/', "")
+                        }
+                    } else {
+                        ""
+                    }
                     out += Video(
                         id = id,
                         title = (c.getString(iName) ?: "Video").substringBeforeLast('.'),
@@ -58,13 +84,13 @@ object VideoRepository {
                         sizeBytes = c.getLong(iSize),
                         width = c.getInt(iW),
                         height = c.getInt(iH),
-                        folder = if (iData >= 0) c.getString(iData)?.substringBeforeLast('/', "").orEmpty() else "",
-                        uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id),
+                        folder = folder,
+                        uri = ContentUris.withAppendedId(collection, id),
                     )
                 }
             }
         } catch (e: SecurityException) {
-            // permission not granted yet
+            // Permission has not been granted (or access was revoked).
         }
         out
     }
