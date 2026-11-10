@@ -710,6 +710,9 @@ class ShareManager private constructor(context: Context) {
 
     private fun base(job: SendJob) = "http://${job.peer.host}:${job.peer.port}"
 
+    /** Sessions are per receiver address *and* PIN, so a restarted receiver (new PIN) gets a fresh key exchange. */
+    private fun sessionKey(job: SendJob) = "${job.peer.host}:${job.peer.port}:${job.pin}"
+
     private fun open(url: String, method: String, readTimeout: Int = 30_000): HttpURLConnection =
         (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = method
@@ -722,7 +725,7 @@ class ShareManager private constructor(context: Context) {
 
     /** Gets (or creates) an encrypted session with the receiver. Null when the receiver runs an older app version. */
     private fun session(job: SendJob): PeerSession? {
-        val k = "${job.peer.host}:${job.peer.port}"
+        val k = sessionKey(job)
         peerSessions[k]?.let { return it }
         synchronized(peerSessions) {
             peerSessions[k]?.let { return it }
@@ -761,7 +764,7 @@ class ShareManager private constructor(context: Context) {
         // 1. how much does the receiver already have?
         val st = open("${base(job)}/status?$q", "GET")
         val have = try {
-            if (st.responseCode == 401) { peerSessions.remove("${job.peer.host}:${job.peer.port}"); throw IOException("Session expired") }
+            if (st.responseCode == 401) { peerSessions.remove(sessionKey(job)); throw IOException("Session expired") }
             if (st.responseCode == 403) throw FatalSend(st.body().ifBlank { "Wrong PIN or the receiver declined" })
             if (st.responseCode != 200) throw IOException("Receiver answered ${st.responseCode}")
             JSONObject(st.body()).getLong("have")
@@ -801,7 +804,7 @@ class ShareManager private constructor(context: Context) {
                     }
                     when (c.responseCode) {
                         200 -> {}
-                        401 -> { peerSessions.remove("${job.peer.host}:${job.peer.port}"); throw IOException("Session expired") }
+                        401 -> { peerSessions.remove(sessionKey(job)); throw IOException("Session expired") }
                         403 -> throw FatalSend(c.body().ifBlank { "Receiver declined" })
                         else -> throw IOException("Receiver answered ${c.responseCode}")
                     }
