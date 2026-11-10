@@ -68,6 +68,9 @@ class ShareManager private constructor(context: Context) {
 
     private var server: ShareServer? = null
     private var pin = ""
+    /** Receiver key for this session; its fingerprint goes into the QR code so scanning senders can detect a MITM. */
+    private var sessionKp: java.security.KeyPair? = null
+    private var sessionFp = ""
     @Volatile private var accepting = false
 
     /** Music library exposed to the web player; kept current by the view model. */
@@ -129,6 +132,7 @@ class ShareManager private constructor(context: Context) {
         server = s
         accepting = true
         pin = String.format("%06d", SecureRandom().nextInt(1_000_000))
+        sessionKp = SecureChannel.newKeyPair().also { sessionFp = SecureChannel.fingerprint(SecureChannel.encodePub(it)) }
         update { copy(sessionRunning = true, port = port, pin = pin, message = null) }
         refreshNetwork()
         registerNsd(port)
@@ -141,6 +145,8 @@ class ShareManager private constructor(context: Context) {
         server = null
         accepting = false
         pin = ""
+        sessionKp = null
+        sessionFp = ""
         unregisterNsd()
         stopHotspot()
         approved.clear()
@@ -157,7 +163,7 @@ class ShareManager private constructor(context: Context) {
         val st = _ui.value
         if (!st.sessionRunning) return
         val ips = localAddresses()
-        val urls = ips.map { "http://$it:${st.port}/?pin=${st.pin}&n=${enc(st.deviceName)}" }
+        val urls = ips.map { "http://$it:${st.port}/?pin=${st.pin}&n=${enc(st.deviceName)}&fp=$sessionFp" }
         update { copy(urls = urls) }
         if (ips.isEmpty()) msg("Connect to Wi-Fi (or start the hotspot) so other devices can reach this phone.")
         else if (_ui.value.message?.startsWith("Connect to Wi-Fi") == true) msg(null)
@@ -247,7 +253,7 @@ class ShareManager private constructor(context: Context) {
 
     /** Key exchange; returns the JSON reply for the sender. */
     fun hello(peerPub: String): String {
-        val kp = SecureChannel.newKeyPair()
+        val kp = sessionKp ?: throw IOException("Not receiving")
         val key = SecureChannel.deriveKey(kp, peerPub, pin)
         val sid = SecureChannel.hex(ByteArray(16).also { SecureRandom().nextBytes(it) })
         sessions[sid] = key
@@ -640,7 +646,8 @@ class ShareManager private constructor(context: Context) {
         val host = u.host
         val pinParam = u.getQueryParameter("pin")
         if ((u.scheme == "http") && !host.isNullOrBlank() && !pinParam.isNullOrBlank()) {
-            Peer(u.getQueryParameter("n") ?: host, host, if (u.port > 0) u.port else 80) to pinParam
+            val fp = u.getQueryParameter("fp")?.filter { it.isLetterOrDigit() }.orEmpty()
+            Peer(u.getQueryParameter("n") ?: host, host, if (u.port > 0) u.port else 80, fp) to pinParam
         } else null
     } catch (e: Exception) {
         null
@@ -760,6 +767,10 @@ class ShareManager private constructor(context: Context) {
                     else -> throw IOException("Receiver answered ${c.responseCode}")
                 }
                 val j = JSONObject(c.body())
+                val fp = job.peer.fp
+                if (fp.isNotEmpty() && !SecureChannel.fingerprint(j.getString("pub")).equals(fp, ignoreCase = true)) {
+                    throw FatalSend("Security check failed: this receiver's key doesn't match its QR code")
+                }
                 val s = PeerSession(j.getString("sid"), SecureChannel.deriveKey(kp, j.getString("pub"), job.pin))
                 peerSessions[k] = s
                 return s

@@ -85,3 +85,13 @@ class QuickPrintTest {
         }
     }
 }
+
+class FingerprintTest {
+    @Test fun fingerprintIsStableAndKeySpecific() {
+        val a = SecureChannel.encodePub(SecureChannel.newKeyPair())
+        val b = SecureChannel.encodePub(SecureChannel.newKeyPair())
+        assertEquals(32, SecureChannel.fingerprint(a).length)
+        assertEquals(SecureChannel.fingerprint(a), SecureChannel.fingerprint(a))
+        assertFalse(SecureChannel.fingerprint(a) == SecureChannel.fingerprint(b))
+    }
+}

@@ -32,6 +32,10 @@ object SecureChannel {
 
     fun encodePub(kp: KeyPair): String = hex(kp.public.encoded)
 
+    /** 128-bit fingerprint of a hex-encoded public key, shown in the receiver's QR code. */
+    fun fingerprint(pubHex: String): String =
+        hex(MessageDigest.getInstance("SHA-256").digest(unhex(pubHex))).take(32)
+
     /** Derives the shared 256-bit AES key from our key pair, the peer's public key and the PIN. */
     fun deriveKey(mine: KeyPair, peerPubHex: String, pin: String): ByteArray {
         val peer = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(unhex(peerPubHex)))

@@ -231,7 +231,9 @@ fun ShareScreen(vm: PlayerViewModel) {
                         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                             Text("Connected to ${peer.name}", fontWeight = FontWeight.SemiBold)
                             Text(
-                                "${peer.host}:${peer.port}", style = MaterialTheme.typography.bodySmall,
+                                "${peer.host}:${peer.port} · " +
+                                    if (peer.fp.isNotEmpty()) "verified via QR, end-to-end encrypted" else "encrypted (scan QR to verify)",
+                                style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
