@@ -186,12 +186,14 @@ class CloudLibrarySync(
         }
 
         val updates = HashMap<Long, SongStats>()
+        val expectedUpdatedAt = HashMap<Long, Long>()
         mergedStats.forEach { (key, value) ->
             val song = index[key]?.firstOrNull() ?: return@forEach
             val snapshotStat = localStats[song.id] ?: SongStats()
             val current = stats.stats.value[song.id] ?: SongStats()
             // A changed timestamp means the user played/liked/rated this track
             // after the sync snapshot; preserve that newer local state.
+            expectedUpdatedAt[song.id] = snapshotStat.updatedAt
             if (current.updatedAt != snapshotStat.updatedAt) return@forEach
             val rating = (value["rating"] as? Number)?.toInt() ?: current.rating
             updates[song.id] = SongStats(
@@ -202,8 +204,8 @@ class CloudLibrarySync(
                 updatedAt = maxOf(current.updatedAt, (value["updatedAt"] as? Number)?.toLong() ?: 0L),
             )
         }
-        stats.putAll(updates)
-        return "Cloud sync complete: ${mergedLists.size} playlists and ${updates.size} matched tracks. Local data was merged, not replaced."
+        val appliedStats = stats.applyCloudMerge(updates, expectedUpdatedAt)
+        return "Cloud sync complete: ${mergedLists.size} playlists and ${appliedStats} matched tracks. Local data was merged, not replaced."
     }
 
     private fun trackPayload(song: Song): Map<String, Any> = mapOf(
