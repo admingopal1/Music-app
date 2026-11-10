@@ -110,7 +110,8 @@ class CloudLibrarySync(
             "schemaVersion" to 2,
             "playlists" to mergedLists,
             "playlistUpdatedAt" to mergedUpdatedAt,
-            "playlistDeletedAt" to boundedDeletedAt,\n            "deletedPlaylists" to boundedDeletedAt.keys.toList(),
+            "playlistDeletedAt" to boundedDeletedAt,
+            "deletedPlaylists" to boundedDeletedAt.keys.toList(),
             "stats" to mergedStats,
             "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
         )
