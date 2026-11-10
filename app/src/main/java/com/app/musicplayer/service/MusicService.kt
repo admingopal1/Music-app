@@ -16,6 +16,8 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.app.musicplayer.MainActivity
 import com.app.musicplayer.audio.SonyAudioEffects
+import com.app.musicplayer.audio.AudioLevelProcessor
+import com.app.musicplayer.audio.AudioLevelMonitor
 import com.app.musicplayer.audio.EnhancerController
 import com.app.musicplayer.audio.EnhancerProcessor
 import com.app.musicplayer.audio.FadeController
@@ -38,6 +40,7 @@ class MusicService : MediaSessionService() {
         // ReplayGain: a small audio processor in front of the AudioTrack scales the PCM.
         val rgProcessor = ReplayGainProcessor()
         val enhancerProcessor = EnhancerProcessor()
+        val audioLevelProcessor = AudioLevelProcessor()
         val renderers = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: Context,
@@ -46,7 +49,7 @@ class MusicService : MediaSessionService() {
             ): AudioSink = DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                .setAudioProcessors(arrayOf<AudioProcessor>(rgProcessor, enhancerProcessor))
+                .setAudioProcessors(arrayOf<AudioProcessor>(rgProcessor, enhancerProcessor, audioLevelProcessor))
                 .build()
         }
 
@@ -118,6 +121,7 @@ class MusicService : MediaSessionService() {
         }
         mediaSession = null
         SonyAudioEffects.get(this).release()
+        AudioLevelMonitor.reset()
         super.onDestroy()
     }
 }
