@@ -645,6 +645,7 @@ class ShareManager private constructor(context: Context) {
 
     private data class SendJob(val peer: Peer, val pin: String, val file: OutFile)
     private class FatalSend(msg: String) : IOException(msg)
+    private class LegacyReceiver : Exception("Receiver runs an older app version")
     private class PeerSession(val sid: String, val key: ByteArray)
 
     private val jobs = ConcurrentHashMap<Long, SendJob>()
@@ -679,12 +680,23 @@ class ShareManager private constructor(context: Context) {
     private fun sendOne(id: Long) {
         val job = jobs[id] ?: return
         var attempt = 0
+        var legacy = false
         try {
             while (true) {
                 if (id in cancelled) return
                 setItem(id) { copy(status = Status.ACTIVE, error = null) }
                 try {
-                    if (job.file.size > 0) sendResumable(job, id) else sendLegacy(job, id)
+                    if (job.file.size > 0 && !legacy) {
+                        try {
+                            sendResumable(job, id)
+                        } catch (e: LegacyReceiver) {
+                            legacy = true
+                            sendLegacy(job, id)
+                        }
+                    } else {
+                        legacy = true
+                        sendLegacy(job, id)
+                    }
                     return
                 } catch (e: FatalSend) {
                     setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = e.message, note = null) }
@@ -694,7 +706,8 @@ class ShareManager private constructor(context: Context) {
                         setItem(id) { copy(status = Status.CANCELLED, speedBps = 0, note = null) }
                         return
                     }
-                    if (++attempt >= MAX_ATTEMPTS) {
+                    // Legacy uploads can't resume or be de-duplicated, so a blind retry could save a second copy.
+                    if (legacy || ++attempt >= MAX_ATTEMPTS) {
                         setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = e.message ?: "Connection failed", note = null) }
                         return
                     }
@@ -755,7 +768,7 @@ class ShareManager private constructor(context: Context) {
 
     private fun sendResumable(job: SendJob, id: Long) {
         val f = job.file
-        val s = session(job) ?: return sendLegacy(job, id)
+        val s = session(job) ?: throw LegacyReceiver()
         val key = SecureChannel.hex(
             MessageDigest.getInstance("SHA-256").digest("${deviceName()}|${f.uri}|${f.name}|${f.size}".toByteArray()),
         ).take(32)
