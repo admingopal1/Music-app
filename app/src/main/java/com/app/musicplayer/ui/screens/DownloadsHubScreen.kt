@@ -7,6 +7,8 @@ import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -133,14 +135,14 @@ fun DownloadsHubScreen() {
     androidx.compose.runtime.LaunchedEffect(Unit) { refresh() }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background))),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text("Downloads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text("Save direct video and audio files to your phone", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Downloads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Save direct video and audio files to your phone", color = Color.White.copy(alpha = 0.68f))
             }
         }
         item {
@@ -241,7 +243,7 @@ fun DownloadsHubScreen() {
             items(rows, key = { it.id }) { item ->
                 Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(item.title, maxLines = 2, fontWeight = FontWeight.SemiBold)
+                        Text(item.title, maxLines = 2, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                         Text(item.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         if (item.total > 0) {
                             val progress = (item.downloaded.toFloat() / item.total.toFloat()).coerceIn(0f, 1f)
