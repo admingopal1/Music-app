@@ -8,7 +8,8 @@ on:
 
 # Keep only the newest build for a branch; rapid commits should not queue stale APK builds.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+# Normalize push and pull-request events to the same branch key, avoiding duplicate builds.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
