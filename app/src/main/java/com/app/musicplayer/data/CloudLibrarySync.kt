@@ -71,7 +71,7 @@ class CloudLibrarySync(
         }?.toMap().orEmpty()
         // Migrate older name-only tombstones into timestamped delete markers.
         val legacyDeleted = (remote["deletedPlaylists"] as? List<*>)?.mapNotNull { it as? String }
-            ?.associateWith { remoteUpdated[it] ?: 1L }.orEmpty()
+            ?.associateWith { name -> remoteDeletedAt[name] ?: remoteUpdated[name] ?: System.currentTimeMillis() }.orEmpty()
         val localUpdated = playlists.updatedAt.value
         val localDeletedAt = playlists.deletedAt.value
         val names = (remoteLists.keys.mapNotNull { it as? String } + localPlaylistPayload.keys +
