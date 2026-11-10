@@ -70,13 +70,21 @@ class CloudLibrarySync(
                 if (editAt > 0L) mergedUpdatedAt[name] = editAt
                 val remoteTracks = remoteLists[name] as? List<*> ?: emptyList<Any>()
                 val localTracks = localPlaylistPayload[name].orEmpty()
-                val combined = LinkedHashMap<String, Map<String, Any>>()
-                (remoteTracks + localTracks).forEach { item ->
+                // A playlist snapshot is authoritative by its edit timestamp. This
+                // propagates song removals as well as additions across devices.
+                val localIsNewer = (localUpdated[name] ?: 0L) > (remoteUpdated[name] ?: 0L)
+                val selectedTracks = when {
+                    localIsNewer -> localTracks
+                    (remoteUpdated[name] ?: 0L) > 0L -> remoteTracks
+                    else -> remoteTracks + localTracks // legacy records without timestamps
+                }
+                val unique = LinkedHashMap<String, Map<String, Any>>()
+                selectedTracks.forEach { item ->
                     val map = item as? Map<String, Any> ?: return@forEach
                     val key = map["key"] as? String ?: return@forEach
-                    combined[key] = map
+                    unique[key] = map
                 }
-                mergedLists[name] = combined.values.toList()
+                mergedLists[name] = unique.values.toList()
             }
         }
         // Keep the newest 500 delete markers to bound the single Firestore document.
