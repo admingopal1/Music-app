@@ -2,6 +2,7 @@ package com.app.musicplayer.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -67,13 +68,15 @@ fun VideosScreen(vm: PlayerViewModel) {
     }
 
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background)))) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (!showDownloads && !showYouTube) Button(onClick = { showDownloads = false; showYouTube = false }) { Text("My videos") }
-            else TextButton(onClick = { showDownloads = false; showYouTube = false }) { Text("My videos") }
-            if (showDownloads) Button(onClick = { showDownloads = true; showYouTube = false }) { Text("Downloads") }
-            else TextButton(onClick = { showDownloads = true; showYouTube = false }) { Text("Downloads") }
-            if (showYouTube) Button(onClick = { showYouTube = true; showDownloads = false }) { Text("YouTube") }
-            else TextButton(onClick = { showYouTube = true; showDownloads = false }) { Text("YouTube") }
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+                .clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.06f))
+                .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp)).padding(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            VideoTab("My videos", !showDownloads && !showYouTube, Modifier.weight(1f)) { showDownloads = false; showYouTube = false }
+            VideoTab("Downloads", showDownloads, Modifier.weight(1f)) { showDownloads = true; showYouTube = false }
+            VideoTab("YouTube", showYouTube, Modifier.weight(1f)) { showYouTube = true; showDownloads = false }
         }
         if (showDownloads) {
             DownloadsHubScreen()
@@ -112,7 +115,13 @@ fun VideosScreen(vm: PlayerViewModel) {
                 Button(onClick = vm::loadVideos, modifier = Modifier.padding(top = 16.dp)) { Text("Scan again") }
             }
         } else {
-            LazyColumn(contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp)) {
+            Text(
+                "${filtered.size} ${if (filtered.size == 1) "video" else "videos"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White.copy(alpha = 0.62f),
+                modifier = Modifier.padding(start = 20.dp, top = 8.dp, bottom = 2.dp),
+            )
+            LazyColumn(contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 itemsIndexed(filtered, key = { _, v -> v.id }) { index, video ->
                     VideoRow(video) {
                         VideoPlayerActivity.start(
@@ -133,7 +142,10 @@ private fun VideoRow(video: Video, onClick: () -> Unit) {
     }
     val accent = MaterialTheme.colorScheme.primary
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.055f))
+            .border(1.dp, Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
@@ -164,6 +176,19 @@ private fun VideoRow(video: Video, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+@Composable
+private fun VideoTab(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Box(
+        modifier.clip(RoundedCornerShape(14.dp))
+            .background(if (selected) Brush.linearGradient(listOf(Color(0xFF9A55E8), Color(0xFF6537B7))) else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)))
+            .clickable(onClick = onClick).padding(vertical = 11.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = if (selected) Color.White else Color.White.copy(alpha = 0.68f),
+            style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
     }
 }
 
