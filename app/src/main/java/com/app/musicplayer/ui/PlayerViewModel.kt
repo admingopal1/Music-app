@@ -25,6 +25,7 @@ import com.app.musicplayer.audio.EnhancerSettings
 import com.app.musicplayer.audio.ReplayGain
 import com.app.musicplayer.audio.ReplayGainStore
 import com.app.musicplayer.data.BackupManager
+import com.app.musicplayer.data.CloudLibrarySync
 import com.app.musicplayer.data.Song
 import com.app.musicplayer.data.StatsStore
 import com.app.musicplayer.lyrics.LyricsRepository
@@ -36,6 +37,7 @@ import com.app.musicplayer.playback.MediaPlayerManager
 import com.app.musicplayer.share.ShareManager
 import com.app.musicplayer.ui.theme.ACCENT_CHOICES
 import com.app.musicplayer.ui.theme.DefaultAccent
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -102,6 +104,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val skipSilence: StateFlow<Boolean> = _skipSilence.asStateFlow()
 
     private val backup = BackupManager(ctx)
+    private val cloudLibrarySync = CloudLibrarySync()
+    private var automaticSyncStarted = false
+    private val _cloudSyncStatus = MutableStateFlow<String?>(null)
+    val cloudSyncStatus: StateFlow<String?> = _cloudSyncStatus.asStateFlow()
     private val _backupMsg = MutableStateFlow<String?>(null)
     val backupMessage: StateFlow<String?> = _backupMsg.asStateFlow()
     private val _fadeSecs = MutableStateFlow(prefs.getFloat("fade_secs", 0f))
@@ -242,8 +248,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             songById = list.associateBy { it.id }
             _songs.value = list
             refreshUi()
+            // One automatic sync after sign-in and initial library scan per app session.
+            if (!automaticSyncStarted && FirebaseAuth.getInstance().currentUser != null) {
+                automaticSyncStarted = true
+                _cloudSyncStatus.value = "Syncing your library…"
+                runCatching { cloudLibrarySync.sync(list, playlists, stats) }
+                    .onSuccess { _cloudSyncStatus.value = it }
+                    .onFailure { _cloudSyncStatus.value = "Automatic sync unavailable: ${it.localizedMessage ?: "check internet and Firestore rules"}" }
+            }
         }
     }
+
+    suspend fun syncCloudLibrary(): String = cloudLibrarySync.sync(_songs.value, playlists, stats)
 
     fun songById(id: Long): Song? = songById[id]
 
