@@ -51,7 +51,12 @@ fun MusicTheme(accent: Color = DefaultAccent, amoled: Boolean = true, content: @
     )
     MaterialTheme(
         colorScheme = scheme,
-        typography = Typography(),
+        typography = Typography(
+            headlineLarge = Typography().headlineLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+            headlineMedium = Typography().headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+            titleLarge = Typography().titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+            titleMedium = Typography().titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+        ),
         shapes = Shapes(
             small = RoundedCornerShape(12.dp),
             medium = RoundedCornerShape(20.dp),
