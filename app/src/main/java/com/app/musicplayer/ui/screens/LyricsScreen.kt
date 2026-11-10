@@ -4,6 +4,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -82,7 +84,13 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background))), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
+                        .background(Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Rounded.Close, "Close") }
                     Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
                         Text(song?.title.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
@@ -97,8 +105,10 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                 val l = lyrics
                 when {
                     loading -> Text(
-                        "Looking for lyrics…", color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(24.dp),
+                        "Looking for lyrics…",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        textAlign = TextAlign.Center,
                     )
                     l == null -> Column(
                         Modifier.fillMaxSize().padding(32.dp),
@@ -106,7 +116,10 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                     ) {
                         Text(
                             "No lyrics found for this song.\n\nLoad an .lrc file for it, or choose a folder with your .lrc files in Settings (names should match the songs).",
-                            textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.055f), RoundedCornerShape(22.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(22.dp)).padding(22.dp),
                         )
                         Button(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.padding(top = 20.dp)) {
                             Text("Load .lrc for this song")
