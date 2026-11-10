@@ -88,6 +88,32 @@ object SecureChannel {
         return mac.doFinal(info + byteArrayOf(1))
     }
 
+    /** Cheap content fingerprint (size + first and last 64 KB) used to spot files the receiver already has. */
+    fun quickPrint(input: InputStream, size: Long): String {
+        val d = MessageDigest.getInstance("SHA-256")
+        d.update(size.toString().toByteArray())
+        val edge = 64 * 1024
+        val buf = ByteArray(edge)
+        fun readUpTo(n: Int): Int {
+            var got = 0
+            while (got < n) { val r = input.read(buf, got, n - got); if (r < 0) break; got += r }
+            return got
+        }
+        val head = readUpTo(minOf(edge.toLong(), size).toInt())
+        d.update(buf, 0, head)
+        if (size > 2L * edge) {
+            var skip = size - edge - head
+            while (skip > 0) {
+                val n = input.skip(skip)
+                if (n <= 0) { if (input.read() < 0) break else skip-- } else skip -= n
+            }
+            d.update(buf, 0, readUpTo(edge))
+        } else if (size > head) {
+            d.update(buf, 0, readUpTo((size - head).toInt()))
+        }
+        return sha256Hex(d).take(32)
+    }
+
     fun sha256Hex(d: MessageDigest): String = d.digest().joinToString("") { "%02x".format(it) }
 
     fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it) }

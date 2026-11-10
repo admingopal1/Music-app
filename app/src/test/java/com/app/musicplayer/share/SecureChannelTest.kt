@@ -70,3 +70,18 @@ class SecureChannelTest {
         assertArrayEquals(b, SecureChannel.unhex(SecureChannel.hex(b)))
     }
 }
+
+class QuickPrintTest {
+    private fun print(b: ByteArray) = SecureChannel.quickPrint(ByteArrayInputStream(b), b.size.toLong())
+
+    @Test fun sameContentSamePrintDifferentContentDifferentPrint() {
+        for (size in intArrayOf(10, 100_000, 1_000_000)) {
+            val a = ByteArray(size).also { Random(1).nextBytes(it) }
+            assertEquals(print(a), print(a.copyOf()))
+            val head = a.copyOf().also { it[0] = (it[0] + 1).toByte() }
+            val tail = a.copyOf().also { it[size - 1] = (it[size - 1] + 1).toByte() }
+            assertFalse(print(a) == print(head))
+            assertFalse(print(a) == print(tail))
+        }
+    }
+}

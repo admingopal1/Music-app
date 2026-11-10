@@ -257,17 +257,18 @@ class ShareManager private constructor(context: Context) {
     fun hasSession(sid: String) = sessions.containsKey(sid)
 
     /** Bytes already received for [key] (to resume), or -1 when this phone already has the file. */
-    fun status(key: String, name: String, size: Long): Long {
-        if (alreadyHave(name, size)) return -1L
+    fun status(key: String, name: String, size: Long, print: String?): Long {
+        if (!print.isNullOrBlank() && alreadyHave(name, size, print)) return -1L
         val f = partial(key)
         return if (f.exists()) f.length().coerceAtMost(size) else 0L
     }
 
-    private fun alreadyHave(name: String, size: Long): Boolean {
+    /** Same name, size *and* content fingerprint, so a different track that happens to match by name/size is still sent. */
+    private fun alreadyHave(name: String, size: Long, print: String): Boolean {
         if (size <= 0) return false
+        fun same(uri: Uri) = runCatching { openUri(uri)?.use { SecureChannel.quickPrint(it, size) } }.getOrNull() == print
         val received = _ui.value.items.any {
-            it.direction == Direction.IN && it.status == Status.DONE && it.name == name && it.size == size && it.uri != null &&
-                runCatching { app.contentResolver.openFileDescriptor(it.uri, "r")?.use { true } }.getOrNull() == true
+            it.direction == Direction.IN && it.status == Status.DONE && it.name == name && it.size == size && it.uri != null && same(it.uri)
         }
         if (received) return true
         val mime = guessMime(name)
@@ -277,10 +278,12 @@ class ShareManager private constructor(context: Context) {
             else -> return false
         }
         return try {
+            val ids = ArrayList<Long>()
             app.contentResolver.query(
                 collection, arrayOf(MediaStore.MediaColumns._ID),
                 "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.SIZE}=?", arrayOf(name, size.toString()), null,
-            )?.use { it.count > 0 } ?: false
+            )?.use { c -> while (c.moveToNext()) ids += c.getLong(0) }
+            ids.any { same(android.content.ContentUris.withAppendedId(collection, it)) }
         } catch (e: Exception) {
             false
         }
@@ -772,7 +775,8 @@ class ShareManager private constructor(context: Context) {
         val key = SecureChannel.hex(
             MessageDigest.getInstance("SHA-256").digest("${deviceName()}|${f.uri}|${f.name}|${f.size}".toByteArray()),
         ).take(32)
-        val q = "pin=${enc(job.pin)}&key=$key&name=${enc(f.name)}&size=${f.size}&sid=${s.sid}&from=${enc(deviceName())}"
+        val print = runCatching { openUri(f.uri)?.use { SecureChannel.quickPrint(it, f.size) } }.getOrNull().orEmpty()
+        val q = "pin=${enc(job.pin)}&key=$key&name=${enc(f.name)}&size=${f.size}&sid=${s.sid}&from=${enc(deviceName())}&qp=$print"
 
         // 1. how much does the receiver already have?
         val st = open("${base(job)}/status?$q", "GET")
