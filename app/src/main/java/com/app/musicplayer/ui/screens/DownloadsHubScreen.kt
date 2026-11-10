@@ -7,8 +7,10 @@ import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -147,7 +149,7 @@ fun DownloadsHubScreen() {
         }
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF29203F).copy(alpha = 0.94f)),
                 shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -193,8 +195,9 @@ fun DownloadsHubScreen() {
         if (platformHint != null) {
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF38294F)),
                     shape = RoundedCornerShape(18.dp),
+                    modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp)),
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(platformHint!!, style = MaterialTheme.typography.bodyMedium)
@@ -230,7 +233,9 @@ fun DownloadsHubScreen() {
         } else if (rows.isEmpty()) {
             item {
                 Column(
-                    Modifier.fillMaxWidth().padding(vertical = 28.dp),
+                    Modifier.fillMaxWidth().padding(vertical = 28.dp)
+                        .clip(RoundedCornerShape(22.dp)).background(Color.White.copy(alpha = 0.055f))
+                        .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(22.dp)).padding(20.dp),
                     horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -241,7 +246,11 @@ fun DownloadsHubScreen() {
             }
         } else {
             items(rows, key = { it.id }) { item ->
-                Card(shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF29203F).copy(alpha = 0.9f)),
+                    modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp)),
+                ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(item.title, maxLines = 2, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                         Text(item.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
