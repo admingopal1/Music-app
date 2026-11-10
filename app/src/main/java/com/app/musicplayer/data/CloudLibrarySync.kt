@@ -46,22 +46,44 @@ class CloudLibrarySync(
         // A single bounded document avoids write-per-track costs on the free tier.
         val remote = libraryDoc.get().await().data ?: emptyMap<String, Any>()
         val remoteLists = remote["playlists"] as? Map<*, *> ?: emptyMap<Any, Any>()
-        val remoteDeletedNames = (remote["deletedPlaylists"] as? List<*>)?.mapNotNull { it as? String }?.toSet().orEmpty()
-        val mergedDeletedNames = remoteDeletedNames + localDeletedNames
+        val remoteUpdated = (remote["playlistUpdatedAt"] as? Map<*, *>)?.mapNotNull { (k, v) ->
+            (k as? String)?.let { it to ((v as? Number)?.toLong() ?: 0L) }
+        }?.toMap().orEmpty()
+        val remoteDeletedAt = (remote["playlistDeletedAt"] as? Map<*, *>)?.mapNotNull { (k, v) ->
+            (k as? String)?.let { it to ((v as? Number)?.toLong() ?: 0L) }
+        }?.toMap().orEmpty()
+        // Migrate older name-only tombstones into timestamped delete markers.
+        val legacyDeleted = (remote["deletedPlaylists"] as? List<*>)?.mapNotNull { it as? String }
+            ?.associateWith { remoteUpdated[it] ?: 1L }.orEmpty()
+        val localUpdated = playlists.updatedAt.value
+        val localDeletedAt = playlists.deletedAt.value
+        val names = (remoteLists.keys.mapNotNull { it as? String } + localPlaylistPayload.keys +
+            remoteUpdated.keys + remoteDeletedAt.keys + legacyDeleted.keys +
+            localUpdated.keys + localDeletedAt.keys).distinct()
+        val mergedUpdatedAt = LinkedHashMap<String, Long>()
+        val mergedDeletedAt = LinkedHashMap<String, Long>()
         val mergedLists = LinkedHashMap<String, List<Map<String, Any>>>()
-        (remoteLists.keys.mapNotNull { it as? String } + localPlaylistPayload.keys).distinct()
-            .filterNot { it in mergedDeletedNames }.forEach { name ->
-            val remoteTracks = remoteLists[name] as? List<*> ?: emptyList<Any>()
-            val localTracks = localPlaylistPayload[name].orEmpty()
-            val combined = LinkedHashMap<String, Map<String, Any>>()
-            (remoteTracks + localTracks).forEach { item ->
-                val map = item as? Map<String, Any> ?: return@forEach
-                val key = map["key"] as? String ?: return@forEach
-                combined[key] = map
+        names.forEach { name ->
+            val editAt = maxOf(remoteUpdated[name] ?: 0L, localUpdated[name] ?: 0L)
+            val deleteAt = maxOf(remoteDeletedAt[name] ?: 0L, legacyDeleted[name] ?: 0L, localDeletedAt[name] ?: 0L)
+            if (deleteAt >= editAt && deleteAt > 0L) {
+                mergedDeletedAt[name] = deleteAt
+            } else {
+                if (editAt > 0L) mergedUpdatedAt[name] = editAt
+                val remoteTracks = remoteLists[name] as? List<*> ?: emptyList<Any>()
+                val localTracks = localPlaylistPayload[name].orEmpty()
+                val combined = LinkedHashMap<String, Map<String, Any>>()
+                (remoteTracks + localTracks).forEach { item ->
+                    val map = item as? Map<String, Any> ?: return@forEach
+                    val key = map["key"] as? String ?: return@forEach
+                    combined[key] = map
+                }
+                mergedLists[name] = combined.values.toList()
             }
-            mergedLists[name] = combined.values.toList()
         }
-
+        // Keep the newest 500 delete markers to bound the single Firestore document.
+        val boundedDeletedAt = mergedDeletedAt.entries
+            .sortedByDescending { it.value }.take(500).associate { it.toPair() }
         val remoteStats = remote["stats"] as? Map<*, *> ?: emptyMap<Any, Any>()
         val mergedStats = LinkedHashMap<String, Map<String, Any>>()
         (remoteStats.keys.mapNotNull { it as? String } + localStatsPayload.keys).distinct().forEach { key ->
@@ -86,15 +108,15 @@ class CloudLibrarySync(
         }
 
         val payload = mapOf(
-            "schemaVersion" to 1,
+            "schemaVersion" to 2,
             "playlists" to mergedLists,
-            "deletedPlaylists" to mergedDeletedNames.toList(),
+            "playlistUpdatedAt" to mergedUpdatedAt,\n            "playlistDeletedAt" to boundedDeletedAt,\n            "deletedPlaylists" to boundedDeletedAt.keys.toList(),
             "stats" to mergedStats,
             "updatedAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
         )
         // Firestore documents are limited to 1 MiB. Keep a safety margin and fail
         // before writing rather than risking a rejected sync.
-        val estimatedBytes = org.json.JSONObject(mapOf("schemaVersion" to 1, "playlists" to mergedLists, "deletedPlaylists" to mergedDeletedNames.toList(), "stats" to mergedStats)).toString().toByteArray(Charsets.UTF_8).size
+        val estimatedBytes = org.json.JSONObject(mapOf("schemaVersion" to 2, "playlists" to mergedLists, "playlistUpdatedAt" to mergedUpdatedAt, "playlistDeletedAt" to boundedDeletedAt, "stats" to mergedStats)).toString().toByteArray(Charsets.UTF_8).size
         require(estimatedBytes <= 700_000) {
             "Cloud library is too large for the safe Firestore document limit. Use local Backup/Restore for the full library."
         }
@@ -115,7 +137,7 @@ class CloudLibrarySync(
             val existing = restoredLists[name].orEmpty()
             restoredLists[name] = existing + ids.filterNot { it in existing }
         }
-        playlists.applyCloudMerge(restoredLists, mergedDeletedNames)
+        playlists.applyCloudMerge(restoredLists, mergedUpdatedAt, boundedDeletedAt)
 
         val updates = HashMap<Long, SongStats>()
         mergedStats.forEach { (key, value) ->
