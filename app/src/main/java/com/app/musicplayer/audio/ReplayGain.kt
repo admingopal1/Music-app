@@ -59,13 +59,14 @@ object ReplayGain {
 
     /** [tags] keys must be lower-case. Handles ReplayGain 2 tags and Opus R128 tags. */
     fun fromTags(tags: Map<String, String>): RgInfo? {
-        var tg = num(tags["replaygain_track_gain"])
-        var ag = num(tags["replaygain_album_gain"])
-        val tp = num(tags["replaygain_track_peak"])
-        val ap = num(tags["replaygain_album_peak"])
+        val normalized = tags.mapKeys { it.key.lowercase() }
+        var tg = num(normalized["replaygain_track_gain"])
+        var ag = num(normalized["replaygain_album_gain"])
+        val tp = num(normalized["replaygain_track_peak"])
+        val ap = num(normalized["replaygain_album_peak"])
         // Opus R128 gains are Q7.8 dB relative to -23 LUFS; ReplayGain 2 uses -18 LUFS.
-        if (tg == null) tg = num(tags["r128_track_gain"])?.let { it / 256f + 5f }
-        if (ag == null) ag = num(tags["r128_album_gain"])?.let { it / 256f + 5f }
+        if (tg == null) tg = num(normalized["r128_track_gain"])?.let { it / 256f + 5f }
+        if (ag == null) ag = num(normalized["r128_album_gain"])?.let { it / 256f + 5f }
         if (tg == null && ag == null) return null
         return RgInfo(tg, tp, ag, ap)
     }
@@ -78,7 +79,12 @@ class ReplayGainStore(ctx: Context) {
     fun get(id: String): RgInfo? {
         val p = prefs.getString(id, null)?.split(';') ?: return null
         if (p.size < 4) return null
-        return RgInfo(p[0].toFloatOrNull(), p[1].toFloatOrNull(), p[2].toFloatOrNull(), p[3].toFloatOrNull())
+        return RgInfo(
+            p[0].takeIf { it.isNotBlank() }?.toFloatOrNull(),
+            p[1].takeIf { it.isNotBlank() }?.toFloatOrNull(),
+            p[2].takeIf { it.isNotBlank() }?.toFloatOrNull(),
+            p[3].takeIf { it.isNotBlank() }?.toFloatOrNull(),
+        )
     }
 
     fun put(id: String, i: RgInfo) {

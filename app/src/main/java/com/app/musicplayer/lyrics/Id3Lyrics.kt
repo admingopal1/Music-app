@@ -71,13 +71,8 @@ object Id3Lyrics {
         while (off < buf.size) {
             val n = input.read(buf, off, buf.size - off)
             if (n < 0) return false
-            if (n == 0) {
-                val one = input.read()
-                if (one < 0) return false
-                buf[off++] = one.toByte()
-            } else {
-                off += n
-            }
+            if (n == 0) return false
+            off += n
         }
         return true
     }

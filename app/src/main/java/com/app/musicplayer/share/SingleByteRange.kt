@@ -44,10 +44,7 @@ internal fun InputStream.skipFully(byteCount: Long): Boolean {
         when {
             bytesRead > 0 -> remaining -= bytesRead.toLong()
             bytesRead < 0 -> return false
-            else -> {
-                if (read() < 0) return false
-                remaining--
-            }
+            else -> return false
         }
     }
     return true

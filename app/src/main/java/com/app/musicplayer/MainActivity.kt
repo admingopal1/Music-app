@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -44,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -112,6 +114,26 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var showMore by remember { mutableStateOf(false) }
+    val tabHistory = rememberSaveable { mutableStateListOf<Int>() }
+
+    fun openTab(destination: Int) {
+        if (destination == tab) {
+            showMore = false
+            return
+        }
+        tabHistory.add(tab)
+        tab = destination
+        showMore = false
+    }
+
+    BackHandler(enabled = showMore || tabHistory.isNotEmpty()) {
+        if (showMore) {
+            showMore = false
+            return@BackHandler
+        }
+        val previous = tabHistory.removeLastOrNull()
+        tab = previous ?: 0
+    }
 
     MusicTheme(accent = accent, amoled = amoled) {
         Scaffold(
@@ -130,7 +152,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                             primaryTabs.forEach { item ->
                                 NavigationBarItem(
                                     selected = tab == item.destination,
-                                    onClick = { showMore = false; tab = item.destination },
+                                    onClick = { openTab(item.destination) },
                                     icon = { Icon(item.icon, contentDescription = item.label) },
                                     label = { Text(item.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                                     colors = navColors(),
@@ -149,7 +171,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                                 DropdownMenuItem(
                                     text = { Text(item.label) },
                                     leadingIcon = { Icon(item.icon, contentDescription = null) },
-                                    onClick = { tab = item.destination; showMore = false },
+                                    onClick = { openTab(item.destination) },
                                 )
                             }
                         }
@@ -168,13 +190,13 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                     label = "tabs",
                 ) { t ->
                     when (t) {
-                        0 -> HomeScreen(vm, onOpenPlayer = { tab = 2 }, onOpenLibrary = { tab = 1 }, onOpenVideos = { tab = 5 })
-                        1 -> LibraryScreen(vm, onOpenPlayer = { tab = 2 })
+                        0 -> HomeScreen(vm, onOpenPlayer = { openTab(2) }, onOpenLibrary = { openTab(1) }, onOpenVideos = { openTab(5) })
+                        1 -> LibraryScreen(vm, onOpenPlayer = { openTab(2) })
                         2 -> PlayerScreen(vm)
                         3 -> EqualizerScreen(vm.fx)
-                        4 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 2 })
+                        4 -> PlaylistsScreen(vm, onOpenPlayer = { openTab(2) })
                         5 -> VideosScreen(vm)
-                        6 -> AssistantScreen(vm, onOpenPlayer = { tab = 2 })
+                        6 -> AssistantScreen(vm, onOpenPlayer = { openTab(2) })
                         else -> ShareScreen(vm)
                     }
                 }
