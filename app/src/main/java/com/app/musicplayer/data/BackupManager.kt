@@ -180,7 +180,7 @@ class BackupManager(private val ctx: Context) {
             val fields = stats.optString(key, "").split(',')
             require(fields.size in 4..5 &&
                 fields[0] in setOf("0", "1") &&
-                fields[1].toIntOrNull() in 0..5 &&
+                fields[1].toIntOrNull()?.let { it in 0..5 } == true &&
                 fields[2].toIntOrNull()?.let { it >= 0 } == true &&
                 fields[3].toLongOrNull()?.let { it >= 0L } == true &&
                 (fields.size == 4 || fields[4].toLongOrNull()?.let { it >= 0L } == true)
