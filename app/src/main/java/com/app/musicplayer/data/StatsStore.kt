@@ -10,6 +10,7 @@ data class SongStats(
     val rating: Int = 0,          // 0..5
     val plays: Int = 0,
     val lastPlayed: Long = 0L,
+    val updatedAt: Long = 0L,
 )
 
 /** Favorites, 1-5 star ratings, play counts and last-played time. Stored locally (SharedPreferences). */
@@ -29,21 +30,23 @@ class StatsStore(ctx: Context) {
                 rating = p[1].toIntOrNull() ?: 0,
                 plays = p[2].toIntOrNull() ?: 0,
                 lastPlayed = p[3].toLongOrNull() ?: 0L,
+                updatedAt = p.getOrNull(4)?.toLongOrNull() ?: 0L,
             )
         }
         return out
     }
 
     private fun save(id: Long, s: SongStats) {
-        prefs.edit().putString(id.toString(), "${if (s.favorite) 1 else 0},${s.rating},${s.plays},${s.lastPlayed}").apply()
-        _stats.value = _stats.value + (id to s)
+        val updated = s.copy(updatedAt = System.currentTimeMillis())
+        prefs.edit().putString(id.toString(), "${if (updated.favorite) 1 else 0},${updated.rating},${updated.plays},${updated.lastPlayed},${updated.updatedAt}").apply()
+        _stats.value = _stats.value + (id to updated)
     }
 
     /** Writes many entries at once (used by restore). */
     fun putAll(entries: Map<Long, SongStats>) {
         if (entries.isEmpty()) return
         val e = prefs.edit()
-        for ((id, s) in entries) e.putString(id.toString(), "${if (s.favorite) 1 else 0},${s.rating},${s.plays},${s.lastPlayed}")
+        for ((id, s) in entries) e.putString(id.toString(), "${if (s.favorite) 1 else 0},${s.rating},${s.plays},${s.lastPlayed},${s.updatedAt}")
         e.apply()
         _stats.value = _stats.value + entries
     }
