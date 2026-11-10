@@ -135,7 +135,7 @@ object SmartEngine {
     fun rediscover(songs: List<Song>, stats: Map<Long, SongStats>, size: Int = 50, now: Long = System.currentTimeMillis()): List<Song> =
         songs.filter { s ->
             val st = stats[s.id] ?: return@filter false
-            (st.plays >= 2 || st.favorite || st.rating >= 4) && now - st.lastPlayed > 21 * DAY
+            st.lastPlayed > 0 && (st.plays >= 2 || st.favorite || st.rating >= 4) && now - st.lastPlayed > 21 * DAY
         }.sortedByDescending { s -> stats[s.id]?.let { songAffinity(it, now) } ?: 0f }
             .let { diversify(it, size) }
 
