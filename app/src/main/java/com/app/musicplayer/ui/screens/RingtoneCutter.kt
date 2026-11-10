@@ -184,19 +184,9 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
             saving = false
             result.onSuccess { uri ->
                 if (setDefault) {
-                    if (RingtoneEngine.canSetDefault(ctx)) {
-                        runCatching { RingtoneEngine.setDefault(ctx, uri, type) }
-                            .onSuccess { Toast.makeText(ctx, "Saved and set as default ${type.label.lowercase()}", Toast.LENGTH_LONG).show() }
-                            .onFailure { Toast.makeText(ctx, "Saved, but couldn't set it as default", Toast.LENGTH_LONG).show() }
-                    } else {
-                        Toast.makeText(ctx, "Saved. Allow \"Modify system settings\", then tap Set as default again.", Toast.LENGTH_LONG).show()
-                        runCatching {
-                            ctx.startActivity(
-                                Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${ctx.packageName}"))
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            )
-                        }
-                    }
+                    runCatching { RingtoneEngine.setDefault(ctx, uri, type) }
+                        .onSuccess { Toast.makeText(ctx, "Saved and set as default ${type.label.lowercase()}", Toast.LENGTH_LONG).show() }
+                        .onFailure { Toast.makeText(ctx, "Saved, but couldn't set it as default", Toast.LENGTH_LONG).show() }
                 } else {
                     Toast.makeText(ctx, "Saved to ${type.label}s: $title", Toast.LENGTH_LONG).show()
                 }
@@ -212,6 +202,16 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
         if (ok && d != null) doSave(d) else Toast.makeText(ctx, "Storage permission is needed to save ringtones", Toast.LENGTH_LONG).show()
     }
     fun save(setDefault: Boolean) {
+        if (setDefault && !RingtoneEngine.canSetDefault(ctx)) {
+            Toast.makeText(ctx, "Allow \"Modify system settings\", then tap Save & set default again.", Toast.LENGTH_LONG).show()
+            runCatching {
+                ctx.startActivity(
+                    Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${ctx.packageName}"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+            return
+        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
         ) {
