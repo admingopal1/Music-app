@@ -7,7 +7,7 @@ import kotlinx.coroutines.tasks.await
 /**
  * Spark-tier, user-scoped sync. Local IDs are never uploaded as device-global IDs;
  * tracks are matched by normalized title/artist/album/duration on each device.
- * Sync is additive so an empty/new device cannot erase another device's library data.
+ * Playlist snapshots use timestamps; a new device cannot overwrite newer cloud state.
  */
 class CloudLibrarySync(
     private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
@@ -87,9 +87,9 @@ class CloudLibrarySync(
                 mergedLists[name] = unique.values.toList()
             }
         }
-        // Keep the newest 500 delete markers to bound the single Firestore document.
-        val boundedDeletedAt = mergedDeletedAt.entries
-            .sortedByDescending { it.value }.take(500).associate { it.toPair() }
+        // Retain deletion markers until the full snapshot can be safely compacted.
+        // Silently pruning a marker could resurrect a stale playlist from an offline device.
+        val boundedDeletedAt = mergedDeletedAt
         val remoteStats = remote["stats"] as? Map<*, *> ?: emptyMap<Any, Any>()
         val mergedStats = LinkedHashMap<String, Map<String, Any>>()
         (remoteStats.keys.mapNotNull { it as? String } + localStatsPayload.keys).distinct().forEach { key ->
@@ -142,8 +142,9 @@ class CloudLibrarySync(
                 val key = track["key"] as? String ?: return@mapNotNull null
                 index[key]?.firstOrNull()?.id
             }
-            val existing = restoredLists[name].orEmpty()
-            restoredLists[name] = existing + ids.filterNot { it in existing }
+            // The merged snapshot already resolved the newest edit timestamp. Applying
+            // it exactly is required for removals to propagate to this device.
+            restoredLists[name] = ids
         }
         playlists.applyCloudMerge(restoredLists, mergedUpdatedAt, boundedDeletedAt)
 
