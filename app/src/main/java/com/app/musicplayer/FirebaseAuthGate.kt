@@ -1,6 +1,7 @@
 package com.app.musicplayer
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -58,6 +59,13 @@ private fun AuthScreen(auth: FirebaseAuth) {
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
+            text = "MUSIC PLAYER",
+            style = MaterialTheme.typography.labelLarge,
+            color = Color(0xFFCA9AFF),
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
             text = if (isRegister) "Create your account" else "Welcome back",
             style = MaterialTheme.typography.headlineMedium,
             color = Color(0xFFE7B6FF), fontWeight = FontWeight.Bold,
@@ -71,7 +79,7 @@ private fun AuthScreen(auth: FirebaseAuth) {
         OutlinedTextField(
             value = email,
             onValueChange = { email = it.trim(); message = null },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(18.dp)),
             label = { Text("Email") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
@@ -81,7 +89,7 @@ private fun AuthScreen(auth: FirebaseAuth) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it; message = null },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(18.dp)),
             label = { Text("Password") },
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
@@ -124,7 +132,7 @@ private fun AuthScreen(auth: FirebaseAuth) {
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(54.dp),
             enabled = !busy,
         ) {
             Text(if (busy) "Please wait…" else if (isRegister) "Create account" else "Sign in")
