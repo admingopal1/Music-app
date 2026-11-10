@@ -105,9 +105,15 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
     var playPos by remember { mutableLongStateOf(-1L) }
     val player = remember { mutableStateOf<MediaPlayer?>(null) }
 
-    fun stopPreview() {
+    var pausedMain by remember { mutableStateOf(false) }
+
+    fun stopPreview(resumeMusic: Boolean = false) {
         player.value?.runCatching { stop(); release() }
         player.value = null; playing = false; playPos = -1L
+        if (resumeMusic && pausedMain) {
+            pausedMain = false
+            if (!vm.ui.value.isPlaying) vm.togglePlay()
+        }
     }
 
     fun aiPick(a: SongAnalysis, sec: Int) {
@@ -128,11 +134,11 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
             error = "Couldn't analyse this song (${e.message ?: e.javaClass.simpleName}). You can still trim it manually."
         }
     }
-    DisposableEffect(Unit) { onDispose { stopPreview() } }
+    DisposableEffect(Unit) { onDispose { stopPreview(resumeMusic = true) } }
 
     fun startPreview() {
         stopPreview()
-        if (vm.ui.value.isPlaying) vm.togglePlay()
+        if (vm.ui.value.isPlaying) { vm.togglePlay(); pausedMain = true }
         val mp = MediaPlayer()
         if (runCatching { mp.setDataSource(ctx, song.uri); mp.prepare() }.isFailure) {
             mp.release()
@@ -153,7 +159,7 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
                     else -> 1f
                 }
                 runCatching { mp.setVolume(v, v) }
-                if (pos >= endMs) { stopPreview(); break }
+                if (pos >= endMs) { stopPreview(resumeMusic = true); break }
                 delay(40)
             }
         }
@@ -294,7 +300,7 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
                 }
 
                 Spacer(Modifier.height(20.dp))
-                OutlinedButton(onClick = { if (playing) stopPreview() else startPreview() }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { if (playing) stopPreview(resumeMusic = true) else startPreview() }, modifier = Modifier.fillMaxWidth()) {
                     Icon(if (playing) Icons.Rounded.Stop else Icons.Rounded.PlayArrow, null)
                     Spacer(Modifier.width(6.dp))
                     Text(if (playing) "Stop preview" else "Preview")
