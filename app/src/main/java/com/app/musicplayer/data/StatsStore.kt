@@ -37,7 +37,9 @@ class StatsStore(ctx: Context) {
     }
 
     private fun save(id: Long, s: SongStats) {
-        val updated = s.copy(updatedAt = System.currentTimeMillis())
+        // Keep local edits strictly ordered even when changes happen in the same millisecond
+        // or the device clock moves backwards.
+        val updated = s.copy(updatedAt = maxOf(System.currentTimeMillis(), s.updatedAt + 1L))
         prefs.edit().putString(id.toString(), "${if (updated.favorite) 1 else 0},${updated.rating},${updated.plays},${updated.lastPlayed},${updated.updatedAt}").apply()
         _stats.value = _stats.value + (id to updated)
     }
