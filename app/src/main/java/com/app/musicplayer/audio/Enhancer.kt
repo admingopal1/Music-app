@@ -256,6 +256,7 @@ class EnhancerProcessor : BaseAudioProcessor() {
     private var laL = FloatArray(laLen)
     private var laR = FloatArray(laLen)
     private var laPos = 0
+    private var laFilled = 0
     private var limTarget = 1f
     private var limGain = 1f
     private var limHold = 0
@@ -294,7 +295,7 @@ class EnhancerProcessor : BaseAudioProcessor() {
         agcCoef = Envelope.coef(rate, 60.0)
         laLen = (rate * 0.004).toInt().coerceAtLeast(16)
         laL = FloatArray(laLen); laR = FloatArray(laLen); laPos = 0
-        limAtt = (1.0 - exp(-3.0 / laLen)).toFloat()
+        limAtt = (1.0 - exp(-6.0 / laLen)).toFloat()
         limRel = Envelope.coef(rate, 120.0)
         aiApplied.fill(0f)
         built = null
@@ -330,6 +331,7 @@ class EnhancerProcessor : BaseAudioProcessor() {
         val s = settings
         val listening = EngineMonitor.listening
         if (s.neutral && !listening) {
+            if (laFilled > 0) clearLookAhead()
             out.put(inputBuffer)
             out.flip()
             return
@@ -369,6 +371,7 @@ class EnhancerProcessor : BaseAudioProcessor() {
                 publish(s)
             }
             if (bypass) {
+                if (laFilled > 0) clearLookAhead()
                 write(out, l, r, is16, dither = false)
                 continue
             }
@@ -454,6 +457,7 @@ class EnhancerProcessor : BaseAudioProcessor() {
                 val dl = laL[laPos]; val dr = laR[laPos]
                 laL[laPos] = l; laR[laPos] = r
                 laPos = (laPos + 1) % laLen
+                if (laFilled < laLen) laFilled++
                 l = soft(dl * limGain); r = soft(dr * limGain)
             }
             write(out, l, r, is16, dither = is16 && boosting)
@@ -518,10 +522,28 @@ class EnhancerProcessor : BaseAudioProcessor() {
         bassEnv.reset()
         compEnv.reset()
         cfDelay.fill(0f); cfPos = 0
-        laL.fill(0f); laR.fill(0f); laPos = 0
+        clearLookAhead()
         limTarget = 1f; limGain = 1f; limHold = 0
         compGain = 1f; compTick = 0
         agcGain = dbToLin(agcDb)
+    }
+
+    private fun clearLookAhead() {
+        laL.fill(0f); laR.fill(0f); laPos = 0; laFilled = 0
+    }
+
+    /** Drains the limiter's look-ahead delay so the end of the track isn't cut off. */
+    override fun onQueueEndOfStream() {
+        if (laFilled == 0 || (encoding != C.ENCODING_PCM_16BIT && encoding != C.ENCODING_PCM_FLOAT)) return
+        val is16 = encoding == C.ENCODING_PCM_16BIT
+        val out = replaceOutputBuffer(laFilled * if (is16) 4 else 8)
+        var p = (laPos - laFilled + laLen) % laLen
+        repeat(laFilled) {
+            write(out, soft(laL[p] * limGain), soft(laR[p] * limGain), is16, dither = false)
+            p = (p + 1) % laLen
+        }
+        clearLookAhead()
+        out.flip()
     }
 
     /** The pending format becomes active here (see BaseAudioProcessor.flush). */

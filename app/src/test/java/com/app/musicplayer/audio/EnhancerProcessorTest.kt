@@ -113,6 +113,27 @@ class EnhancerProcessorTest {
         assertTrue(rms(out, out.size - rate) > rms(input, input.size - rate) * 1.5f)
     }
 
+    @Test fun endOfStreamDrainsLookAheadSoNoSamplesAreLost() {
+        val p = processor(C.ENCODING_PCM_FLOAT, EnhancerSettings(limiter = true))
+        val input = stereoSine(rate / 2, 0.5f, 440.0)
+        val out = runFloat(p, input)
+        p.queueEndOfStream()
+        val tail = p.output
+        val drained = tail.remaining() / 4
+        val all = out + FloatArray(drained) { tail.float }
+        assertTrue(p.isEnded)
+        val delay = all.size - input.size
+        assertTrue("delay=$delay", delay > 0)
+        for (i in input.indices) assertEquals(input[i], all[i + delay], 1e-4f)
+    }
+
+    @Test fun limiterHoldsCeilingOnSuddenPeaks() {
+        val p = processor(C.ENCODING_PCM_FLOAT, EnhancerSettings(limiter = true))
+        val input = FloatArray(rate * 2) { i -> val f = i / 2; if ((f / 2000) % 2 == 0) 0.1f else if (f % 2000 == 0) 0.999f else 0.3f }
+        val peak = runFloat(p, input).maxOf { abs(it) }
+        assertTrue("peak=$peak", peak <= 0.95f)
+    }
+
     @Test fun mono16BitPassesThroughUnconfigured() {
         val p = EnhancerProcessor()
         p.settings = EnhancerSettings(bass = 1f)
