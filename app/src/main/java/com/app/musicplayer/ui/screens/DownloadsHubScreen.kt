@@ -117,8 +117,14 @@ fun DownloadsHubScreen() {
             Toast.makeText(context, "Use a direct MP4, WebM, MOV or audio-file URL. Web pages and streaming playlists are not direct files.", Toast.LENGTH_LONG).show()
             return
         }
+        if (hasActiveDownload(context, parsed.toString())) {
+            Toast.makeText(context, "This media URL is already queued or downloading", Toast.LENGTH_LONG).show()
+            return
+        }
         val rawName = parsed.lastPathSegment?.let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrNull() }.orEmpty()
-        val safeName = rawName.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(100).ifBlank { "media_${System.currentTimeMillis()}.mp4" }
+        val requestedName = rawName.replace(Regex("[^A-Za-z0-9._ -]"), "_").trim().trim('.').take(100)
+            .ifBlank { "media_${System.currentTimeMillis()}.mp4" }
+        val safeName = uniqueDownloadFileName(context, requestedName)
         runCatching {
             val request = DownloadManager.Request(parsed)
                 .setTitle(safeName)
@@ -335,6 +341,43 @@ fun DownloadsHubScreen() {
             }
         }
     }
+}
+
+/** Avoid duplicate active URLs and filename collisions in the shared Downloads/MusicPlayer folder. */
+private fun hasActiveDownload(context: Context, sourceUri: String): Boolean {
+    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val cursor = manager.query(DownloadManager.Query()) ?: return false
+    return cursor.use { c ->
+        val uriCol = c.getColumnIndex(DownloadManager.COLUMN_URI)
+        val statusCol = c.getColumnIndex(DownloadManager.COLUMN_STATUS)
+        if (uriCol < 0 || statusCol < 0) return@use false
+        var found = false
+        while (c.moveToNext() && !found) {
+            val status = c.getInt(statusCol)
+            val active = status == DownloadManager.STATUS_PENDING ||
+                status == DownloadManager.STATUS_RUNNING || status == DownloadManager.STATUS_PAUSED
+            found = active && c.getString(uriCol) == sourceUri
+        }
+        found
+    }
+}
+
+private fun uniqueDownloadFileName(context: Context, requestedName: String): String {
+    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val cursor = manager.query(DownloadManager.Query()) ?: return requestedName
+    val alreadyUsed = cursor.use { c ->
+        val titleCol = c.getColumnIndex(DownloadManager.COLUMN_TITLE)
+        if (titleCol < 0) false else {
+            var found = false
+            while (c.moveToNext() && !found) found = c.getString(titleCol).equals(requestedName, ignoreCase = true)
+            found
+        }
+    }
+    if (!alreadyUsed) return requestedName
+    val dot = requestedName.lastIndexOf('.')
+    val base = if (dot > 0) requestedName.substring(0, dot) else requestedName
+    val extension = if (dot > 0) requestedName.substring(dot) else ""
+    return "${base.take(70)}-${System.currentTimeMillis()}$extension"
 }
 
 private fun uniqueRetryFileName(title: String): String {
