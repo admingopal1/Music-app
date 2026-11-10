@@ -930,8 +930,17 @@ class ShareManager private constructor(context: Context) {
                 if (match != null) ids += match.id else missing++
             }
             if (ids.isNotEmpty()) {
-                store.create(name)
-                ids.forEach { store.addSong(name, it) }
+                // First time: pick a name that doesn't clash with the user's own playlists, and remember it
+                // so later passes (songs still arriving) keep filling the same playlist.
+                val target = p.optString("target").ifBlank {
+                    var n = name
+                    var k = 2
+                    while (store.lists.value.containsKey(n)) n = if (k == 2) "$name (shared)".also { k++ } else "$name (shared ${k++ - 1})"
+                    p.put("target", n)
+                    n
+                }
+                store.create(target)
+                ids.forEach { store.addSong(target, it) }
                 created++
             }
             val fresh = System.currentTimeMillis() - p.optLong("received") < 2 * 86_400_000L
