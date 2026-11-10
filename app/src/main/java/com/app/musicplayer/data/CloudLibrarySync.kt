@@ -18,6 +18,24 @@ class CloudLibrarySync(
         playlists: PlaylistStore,
         stats: StatsStore,
     ): String {
+        // Retry the complete merge if another device writes between our read and commit.
+        repeat(4) {
+            try {
+                return syncOnce(songs, playlists, stats)
+            } catch (_: SyncConflictException) {
+                // Re-read and recompute from the latest cloud snapshot.
+            }
+        }
+        return "Cloud library changed repeatedly on another device. Please retry sync."
+    }
+
+    private class SyncConflictException : Exception()
+
+    private suspend fun syncOnce(
+        songs: List<Song>,
+        playlists: PlaylistStore,
+        stats: StatsStore,
+    ): String {
         val user = auth.currentUser ?: return "Please sign in before syncing."
         val byId = songs.associateBy { it.id }
         val userDoc = db.collection("users").document(user.uid)
@@ -42,7 +60,8 @@ class CloudLibrarySync(
         }.toMap()
 
         // A single bounded document avoids write-per-track costs on the free tier.
-        val remote = libraryDoc.get().await().data ?: emptyMap<String, Any>()
+        val remoteSnapshot = libraryDoc.get().await()
+        val remote = remoteSnapshot.data ?: emptyMap<String, Any>()
         val remoteLists = remote["playlists"] as? Map<*, *> ?: emptyMap<Any, Any>()
         val remoteUpdated = (remote["playlistUpdatedAt"] as? Map<*, *>)?.mapNotNull { (k, v) ->
             (k as? String)?.let { it to ((v as? Number)?.toLong() ?: 0L) }
@@ -131,7 +150,18 @@ class CloudLibrarySync(
 
         // Replace this dedicated library document so removed playlists and
         // pruned tombstones are actually removed (merge would retain stale map keys).
-        libraryDoc.set(payload).await()
+        // Optimistic transaction: commit only if the document is still the exact
+        // snapshot used for this merge. A competing device forces a full re-read/re-merge.
+        val committed = db.runTransaction { transaction ->
+            val latestSnapshot = transaction.get(libraryDoc)
+            if (latestSnapshot.updateTime != remoteSnapshot.updateTime) {
+                false
+            } else {
+                transaction.set(libraryDoc, payload)
+                true
+            }
+        }.await()
+        if (!committed) throw SyncConflictException()
 
         // Merge remote entries back into this device, matching by track metadata.
         val index = songs.groupBy { trackKey(it) }
