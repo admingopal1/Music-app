@@ -143,6 +143,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val rgLimit: StateFlow<Boolean> = _rgLimit.asStateFlow()
 
     private var controller: MediaController? = null
+    private var viewModelCleared = false
 
     private sealed interface PendingPlaybackAction {
         data class ReplaceSongs(val songs: List<Song>, val index: Int) : PendingPlaybackAction
@@ -195,9 +196,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val token = SessionToken(ctx, ComponentName(ctx, MusicService::class.java))
         val future = MediaController.Builder(ctx, token).buildAsync()
         future.addListener({
-            runCatching { future.get() }.onSuccess { c ->
-                controller = c
-                c.addListener(listener)
+            val connected = runCatching { future.get() }.getOrNull()
+            if (connected != null) {
+                // The asynchronous connection can finish after this ViewModel is cleared.
+                // Release that late controller instead of leaking the MediaSession binding.
+                if (viewModelCleared) {
+                    connected.release()
+                    return@addListener
+                }
+                controller = connected
+                connected.addListener(listener)
                 refreshUi()
                 // Replay queued actions in order after the MediaSession is ready.
                 pendingPlayback.drain().forEach { action ->
@@ -585,6 +593,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        viewModelCleared = true
         auth.removeAuthStateListener(authListener)
         autoSyncJob?.cancel()
         sleepJob?.cancel()
