@@ -1,17 +1,23 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Private user data: authenticated owner only.
-    match /users/{uid}/{document=**} {
+
+    // A signed-in user can access only their own profile document.
+    match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // And only their own nested data (playlists, preferences, history, etc.).
+      match /{document=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
     }
 
-    // Server-managed rate limits and operational data are never client-accessible.
+    // Server-managed/private collections are never accessible from clients.
     match /_server/{document=**} {
       allow read, write: if false;
     }
 
-    // Default deny for all other documents.
+    // Deny every path not explicitly allowed above.
     match /{document=**} {
       allow read, write: if false;
     }
