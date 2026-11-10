@@ -2,6 +2,10 @@ package com.app.musicplayer.share
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
+import java.io.ByteArrayInputStream
+import java.io.FilterInputStream
 import org.junit.Test
 
 class SingleByteRangeTest {
@@ -18,6 +22,19 @@ class SingleByteRangeTest {
     @Test fun clampsEndToFileLength() {
         assertEquals(SingleByteRange(90, 99), SingleByteRange.parse("bytes=90-500", 100))
     }
+    @Test fun skipFullyReadsWhenStreamSkipIsUnsupported() {
+        val input = object : FilterInputStream(ByteArrayInputStream("abcdefgh".toByteArray())) {
+            override fun skip(n: Long): Long = 0L
+        }
+        assertTrue(input.skipFully(6L))
+        assertEquals('g'.code, input.read())
+    }
+
+    @Test fun skipFullyFailsWhenStreamEndsBeforeRequestedOffset() {
+        val input = ByteArrayInputStream("abc".toByteArray())
+        assertFalse(input.skipFully(4L))
+    }
+
     @Test fun rejectsMalformedAndUnsatisfiableRanges() {
         listOf("items=0-1", "bytes=", "bytes=-0", "bytes=100-", "bytes=9-2",
             "bytes=1-2,4-5", "bytes=abc-def", "bytes=--2").forEach {

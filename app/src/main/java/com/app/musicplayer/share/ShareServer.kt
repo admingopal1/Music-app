@@ -80,13 +80,9 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
             partial = true
         }
         val raw = mgr.openOut(f) ?: return text(Status.INTERNAL_ERROR, "Can't open file")
-        if (start > 0) {
-            var left = start
-            while (left > 0) {
-                val s = raw.skip(left)
-                if (s <= 0) break
-                left -= s
-            }
+        if (start > 0 && !raw.skipFully(start)) {
+            runCatching { raw.close() }
+            return text(Status.INTERNAL_ERROR, "Could not seek to the requested byte range.")
         }
         val stream = mgr.countingStream(raw, f, ip, start)
         val len = if (total > 0) end - start + 1 else -1L

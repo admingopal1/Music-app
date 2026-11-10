@@ -1,5 +1,7 @@
 package com.app.musicplayer.share
 
+import java.io.InputStream
+
 /** A validated, inclusive single HTTP byte range. */
 data class SingleByteRange(val start: Long, val endInclusive: Long) {
     companion object {
@@ -25,4 +27,28 @@ data class SingleByteRange(val start: Long, val endInclusive: Long) {
             return SingleByteRange(start, requestedEnd.coerceAtMost(totalBytes - 1L))
         }
     }
+}
+
+/** Skip exactly [byteCount] bytes, falling back to reads when a stream cannot skip. */
+internal fun InputStream.skipFully(byteCount: Long): Boolean {
+    if (byteCount < 0L) return false
+    var remaining = byteCount
+    val buffer = ByteArray(8 * 1024)
+    while (remaining > 0L) {
+        val skipped = skip(remaining)
+        if (skipped > 0L) {
+            remaining -= skipped
+            continue
+        }
+        val read = read(buffer, 0, minOf(remaining, buffer.size.toLong()).toInt())
+        when {
+            read > 0 -> remaining -= read.toLong()
+            read < 0 -> return false
+            else -> {
+                if (read() < 0) return false
+                remaining--
+            }
+        }
+    }
+    return true
 }
