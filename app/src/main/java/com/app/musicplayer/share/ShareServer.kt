@@ -53,6 +53,9 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
             ?: "file"
         val name = sanitize(raw)
         val length = session.headers["content-length"]?.toLongOrNull() ?: -1L
+        if (length > ShareManager.MAX_UPLOAD_BYTES) {
+            return text(Status.lookup(413) ?: Status.INTERNAL_ERROR, "File exceeds the 2 GiB upload limit.")
+        }
         val from = session.parms["from"]?.takeIf { it.isNotBlank() } ?: ip.ifBlank { "device" }
         val ok = mgr.receiveStream(name, length, session.inputStream, from)
         val r = if (ok) json("{\"ok\":true}") else text(Status.INTERNAL_ERROR, "Receive failed")
@@ -69,21 +72,17 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
         var end = total - 1
         var partial = false
         val range = session.headers["range"]
-        if (range != null && range.startsWith("bytes=") && total > 0) {
-            val parts = range.removePrefix("bytes=").split("-")
-            start = parts.getOrNull(0)?.toLongOrNull() ?: 0L
-            parts.getOrNull(1)?.toLongOrNull()?.let { end = it.coerceAtMost(total - 1) }
-            if (start >= total || start > end) return text(Status.RANGE_NOT_SATISFIABLE, "Bad range")
+        if (range != null) {
+            val parsed = SingleByteRange.parse(range, total)
+                ?: return text(Status.RANGE_NOT_SATISFIABLE, "Bad range")
+            start = parsed.start
+            end = parsed.endInclusive
             partial = true
         }
         val raw = mgr.openOut(f) ?: return text(Status.INTERNAL_ERROR, "Can't open file")
-        if (start > 0) {
-            var left = start
-            while (left > 0) {
-                val s = raw.skip(left)
-                if (s <= 0) break
-                left -= s
-            }
+        if (start > 0 && !raw.skipFully(start)) {
+            runCatching { raw.close() }
+            return text(Status.INTERNAL_ERROR, "Could not seek to the requested byte range.")
         }
         val stream = mgr.countingStream(raw, f, ip, start)
         val len = if (total > 0) end - start + 1 else -1L

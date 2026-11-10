@@ -2,13 +2,20 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/vidmate-style-download-hub ]
   pull_request:
   workflow_dispatch:
+
+# Keep only the newest build for a branch; rapid commits should not queue stale APK builds.
+concurrency:
+# Normalize push and pull-request events to the same branch key, avoiding duplicate builds.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout code
@@ -24,6 +31,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.9
+
+      - name: Run local unit tests
+        run: gradle testDebugUnitTest --stacktrace
 
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace

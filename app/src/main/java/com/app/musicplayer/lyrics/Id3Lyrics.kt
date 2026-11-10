@@ -21,16 +21,19 @@ object Id3Lyrics {
         if (flags and 0x80 != 0) tag = removeUnsync(tag)
 
         var pos = 0
-        if (flags and 0x40 != 0 && tag.size >= 4) {      // extended header
-            val ext = if (version == 4) synchsafe(tag, 0) else int32(tag, 0) + 4
-            pos = ext.coerceAtLeast(0)
+        if (flags and 0x40 != 0) {      // extended header
+            if (tag.size < 4) return null
+            val extSize = if (version == 4) synchsafe(tag, 0).toLong() else int32(tag, 0).toLong() + 4L
+            if (extSize < 4L || extSize > tag.size.toLong()) return null
+            pos = extSize.toInt()
         }
         while (pos + 10 <= tag.size) {
             if (tag[pos].toInt() == 0) break
             val id = String(tag, pos, 4, Charsets.ISO_8859_1)
             val frameSize = if (version == 4) synchsafe(tag, pos + 4) else int32(tag, pos + 4)
             val start = pos + 10
-            if (frameSize <= 0 || start + frameSize > tag.size) break
+            // Compare against remaining bytes instead of adding untrusted sizes (overflow-safe).
+            if (frameSize <= 0 || frameSize > tag.size - start) break
             if (id == "USLT") return decodeUslt(tag, start, frameSize)
             pos = start + frameSize
         }
@@ -68,7 +71,13 @@ object Id3Lyrics {
         while (off < buf.size) {
             val n = input.read(buf, off, buf.size - off)
             if (n < 0) return false
-            off += n
+            if (n == 0) {
+                val one = input.read()
+                if (one < 0) return false
+                buf[off++] = one.toByte()
+            } else {
+                off += n
+            }
         }
         return true
     }

@@ -53,7 +53,7 @@ class ShareManager private constructor(context: Context) {
     private val failures = HashMap<String, Pair<Int, Long>>()
 
     private var server: ShareServer? = null
-    private var pin = ""
+    @Volatile private var pin = ""
     @Volatile private var accepting = false
 
     // ------------------------------------------------------------------ small helpers
@@ -163,6 +163,10 @@ class ShareManager private constructor(context: Context) {
     fun checkPin(given: String, ip: String): Int {
         synchronized(failures) {
             val now = System.currentTimeMillis()
+            failures.entries.removeAll { now - it.value.second >= 60_000L }
+            if (ip !in failures && failures.size >= 512) {
+                failures.minByOrNull { it.value.second }?.key?.let(failures::remove)
+            }
             val f = failures[ip]
             val count = if (f != null && now - f.second < 60_000L) f.first else 0
             if (count >= 8) return 2
@@ -275,7 +279,11 @@ class ShareManager private constructor(context: Context) {
                 }
                 val resolver = app.contentResolver
                 val uri = resolver.insert(collection, values) ?: return null
-                val out = resolver.openOutputStream(uri) ?: return null
+                val out = resolver.openOutputStream(uri)
+                if (out == null) {
+                    resolver.delete(uri, null, null)
+                    return null
+                }
                 Incoming(
                     uri, out,
                     finish = {
@@ -321,6 +329,7 @@ class ShareManager private constructor(context: Context) {
                     if (want <= 0) break
                     val n = input.read(buf, 0, want)
                     if (n < 0) break
+                    if (done + n > MAX_UPLOAD_BYTES) throw IOException("File exceeds the 2 GiB upload limit")
                     out.write(buf, 0, n)
                     done += n
                     tracker.add(done)
@@ -339,6 +348,7 @@ class ShareManager private constructor(context: Context) {
                 copy(status = if (wasCancelled) Status.CANCELLED else Status.FAILED, speedBps = 0, error = if (wasCancelled) null else e.message)
             }
         } finally {
+            cancelled.remove(item.id)
             maybeStopService()
         }
         return ok
@@ -403,7 +413,11 @@ class ShareManager private constructor(context: Context) {
     }
 
     private fun sendOne(peer: Peer, pin: String, f: OutFile, id: Long) {
-        if (id in cancelled) return
+        if (id in cancelled) {
+            cancelled.remove(id)
+            maybeStopService()
+            return
+        }
         setItem(id) { copy(status = Status.ACTIVE) }
         var conn: HttpURLConnection? = null
         try {
@@ -450,6 +464,7 @@ class ShareManager private constructor(context: Context) {
         } finally {
             connections.remove(id)
             conn?.disconnect()
+            cancelled.remove(id)
             maybeStopService()
         }
     }
@@ -603,6 +618,7 @@ class ShareManager private constructor(context: Context) {
     }
 
     companion object {
+        const val MAX_UPLOAD_BYTES = 2L * 1024 * 1024 * 1024
         private const val SERVICE_TYPE = "_musicshare._tcp."
 
         @Volatile private var instance: ShareManager? = null

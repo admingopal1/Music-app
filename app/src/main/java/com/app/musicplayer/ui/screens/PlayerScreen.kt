@@ -6,8 +6,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -101,7 +99,6 @@ import com.app.musicplayer.data.asClock
 import com.app.musicplayer.ui.PlayerUi
 import com.app.musicplayer.ui.PlayerViewModel
 import com.app.musicplayer.audio.ReplayGain
-import kotlin.math.sin
 
 /** Frosted panel: translucent gradient + hairline border, sitting on top of the blurred album-art backdrop. */
 @Composable
@@ -120,6 +117,7 @@ fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.()
 @Composable
 fun PlayerScreen(vm: PlayerViewModel) {
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val audioLevels by vm.audioLevels.collectAsStateWithLifecycle()
     val art by vm.art.collectAsStateWithLifecycle()
     val accentSecondary by vm.accentSecondary.collectAsStateWithLifecycle()
     val accent = MaterialTheme.colorScheme.primary
@@ -187,7 +185,7 @@ fun PlayerScreen(vm: PlayerViewModel) {
                 )
                 Spacer(Modifier.height(16.dp))
 
-                WaveSpectrum(ui.isPlaying, accent, Modifier.fillMaxWidth().height(48.dp))
+                WaveSpectrum(audioLevels, ui.isPlaying, accent, Modifier.fillMaxWidth().height(48.dp))
                 Spacer(Modifier.height(16.dp))
 
                 GlassCard(Modifier.fillMaxWidth()) {
@@ -532,31 +530,17 @@ private suspend fun withFrameNanosCompat(): Long = androidx.compose.runtime.with
 
 /** Decorative animated spectrum. (Real FFT needs android.media.audiofx.Visualizer + RECORD_AUDIO permission.) */
 @Composable
-private fun WaveSpectrum(active: Boolean, color: Color, modifier: Modifier) {
-    val transition = rememberInfiniteTransition(label = "wave")
-    val phase: Float by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 2400, easing = LinearEasing)
-        ),
-        label = "phase",
-    )
-    val amp: Float by animateFloatAsState(
-        targetValue = if (active) 1f else 0.08f,
-        animationSpec = tween(500),
-        label = "amp",
-    )
+private fun WaveSpectrum(levels: List<Float>, active: Boolean, color: Color, modifier: Modifier) {
     Canvas(modifier) {
-        val bars = 36
+        val bars = levels.size.coerceAtLeast(1)
         val gap = 4.dp.toPx()
         val w = (size.width - gap * (bars - 1)) / bars
         for (i in 0 until bars) {
-            val a: Float = 0.5f + 0.5f * sin(phase * 2f + i * 0.5f)
-            val b: Float = 0.5f + 0.5f * sin(phase * 3f - i * 0.9f)
-            val h: Float = (0.12f + 0.88f * a * b) * amp * size.height
+            val signal = if (active) levels.getOrElse(i) { 0f } else 0f
+            val h = (0.035f + signal * 0.965f) * size.height
+            val alpha = if (active) (0.42f + signal * 0.58f) else 0.16f
             drawRoundRect(
-                color = color.copy(alpha = 0.35f + 0.65f * a),
+                color = color.copy(alpha = alpha),
                 topLeft = Offset(i * (w + gap), (size.height - h) / 2f),
                 size = Size(w, h),
                 cornerRadius = CornerRadius(w / 2f),

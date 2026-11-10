@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -61,6 +62,16 @@ dependencies {
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("org.nanohttpd:nanohttpd:2.3.1")
+    // Firebase client SDKs (project-specific google-services.json still required for runtime use)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+    implementation("com.google.firebase:firebase-appcheck-playintegrity")
+    implementation("com.google.firebase:firebase-appcheck-debug")
+
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+
+    testImplementation("junit:junit:4.13.2")
 }

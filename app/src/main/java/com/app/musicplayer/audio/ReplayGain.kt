@@ -243,7 +243,7 @@ class FadeController(
         val d = player.duration
         if (secs > 0f && d != C.TIME_UNSET && d > 0L) {
             val p = player.currentPosition
-            val half = min(secs * 500f, d / 4f)          // milliseconds for each half of the fade
+            val half = min(secs * 500f, d / 4f).coerceAtLeast(1f) // milliseconds for each half; avoid zero on very short media
             if (fadeInActive) {
                 if (p >= half) fadeInActive = false else f = min(f, (p / half).coerceIn(0f, 1f))
             }

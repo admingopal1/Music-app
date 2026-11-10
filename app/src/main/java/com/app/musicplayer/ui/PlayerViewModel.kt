@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
@@ -18,6 +19,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.palette.graphics.Palette
 import com.app.musicplayer.audio.SonyAudioEffects
+import com.app.musicplayer.audio.AudioLevelMonitor
 import com.app.musicplayer.data.ArtLoader
 import com.app.musicplayer.data.MediaStoreRepository
 import com.app.musicplayer.data.PlaylistStore
@@ -25,6 +27,7 @@ import com.app.musicplayer.audio.EnhancerSettings
 import com.app.musicplayer.audio.ReplayGain
 import com.app.musicplayer.audio.ReplayGainStore
 import com.app.musicplayer.data.BackupManager
+import com.app.musicplayer.data.CloudLibrarySync
 import com.app.musicplayer.data.Song
 import com.app.musicplayer.data.StatsStore
 import com.app.musicplayer.lyrics.LyricsRepository
@@ -33,15 +36,23 @@ import com.app.musicplayer.data.VideoRepository
 import com.app.musicplayer.data.toMediaItem
 import com.app.musicplayer.service.MusicService
 import com.app.musicplayer.playback.MediaPlayerManager
+import com.app.musicplayer.playback.PlaybackOptions
+import com.app.musicplayer.playback.PendingPlaybackQueue
 import com.app.musicplayer.share.ShareManager
 import com.app.musicplayer.ui.theme.ACCENT_CHOICES
 import com.app.musicplayer.ui.theme.DefaultAccent
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -59,10 +70,12 @@ data class PlayerUi(
     val pitch: Float = 1f,
 )
 
+@OptIn(FlowPreview::class)
 class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val ctx = app.applicationContext
     val fx: SonyAudioEffects = SonyAudioEffects.get(ctx)
+    val audioLevels = AudioLevelMonitor.levels
     val share = ShareManager.get(ctx)
     val playlists = PlaylistStore(ctx)
     val stats = StatsStore(ctx)
@@ -89,6 +102,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _sleepLeft = MutableStateFlow(0L)
     val sleepLeftMs: StateFlow<Long> = _sleepLeft.asStateFlow()
     private var sleepJob: Job? = null
+    private var sleepBaseVolume: Float? = null
 
     private val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val _dynamic = MutableStateFlow(prefs.getBoolean("dynamic_colors", false))
@@ -102,6 +116,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val skipSilence: StateFlow<Boolean> = _skipSilence.asStateFlow()
 
     private val backup = BackupManager(ctx)
+    private val cloudLibrarySync = CloudLibrarySync()
+    private var libraryLoaded = false
+    private var autoSyncJob: Job? = null
+    private val _cloudSyncStatus = MutableStateFlow<String?>(null)
+    val cloudSyncStatus: StateFlow<String?> = _cloudSyncStatus.asStateFlow()
+    private val auth = FirebaseAuth.getInstance()
+    private val authListener = FirebaseAuth.AuthStateListener { state ->
+        if (state.currentUser != null) scheduleAutomaticCloudSync()
+        else _cloudSyncStatus.value = "Sign in to enable cloud library sync."
+    }
     private val _backupMsg = MutableStateFlow<String?>(null)
     val backupMessage: StateFlow<String?> = _backupMsg.asStateFlow()
     private val _fadeSecs = MutableStateFlow(prefs.getFloat("fade_secs", 0f))
@@ -119,6 +143,17 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val rgLimit: StateFlow<Boolean> = _rgLimit.asStateFlow()
 
     private var controller: MediaController? = null
+    private var viewModelCleared = false
+
+    private sealed interface PendingPlaybackAction {
+        data class ReplaceSongs(val songs: List<Song>, val index: Int) : PendingPlaybackAction
+        data class PlayNext(val song: Song) : PendingPlaybackAction
+        data class AddToQueue(val song: Song) : PendingPlaybackAction
+        data class PlayUrl(val url: String) : PendingPlaybackAction
+    }
+
+    // Retain queue requests until the MediaSession controller is connected.
+    private val pendingPlayback = PendingPlaybackQueue<PendingPlaybackAction>()
     private var songById: Map<Long, Song> = emptyMap()
     private var artFor: Long? = null
     private var artJob: Job? = null
@@ -133,7 +168,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         _accent.value = baseAccent()
+        auth.addAuthStateListener(authListener)
         connect()
+        // Debounced foreground sync for playlist/favourite/rating/play-history changes.
+        viewModelScope.launch {
+            combine(playlists.lists, stats.stats) { _, _ -> Unit }
+                .drop(1)
+                .debounce(12_000)
+                .collect { scheduleAutomaticCloudSync() }
+        }
         viewModelScope.launch {
             while (true) {
                 val abActive = _abA.value >= 0 && _abB.value > _abA.value
@@ -153,10 +196,26 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         val token = SessionToken(ctx, ComponentName(ctx, MusicService::class.java))
         val future = MediaController.Builder(ctx, token).buildAsync()
         future.addListener({
-            runCatching { future.get() }.onSuccess { c ->
-                controller = c
-                c.addListener(listener)
+            val connected = runCatching { future.get() }.getOrNull()
+            if (connected != null) {
+                // The asynchronous connection can finish after this ViewModel is cleared.
+                // Release that late controller instead of leaking the MediaSession binding.
+                if (viewModelCleared) {
+                    connected.release()
+                    return@addListener
+                }
+                controller = connected
+                connected.addListener(listener)
                 refreshUi()
+                // Replay queued actions in order after the MediaSession is ready.
+                pendingPlayback.drain().forEach { action ->
+                    when (action) {
+                        is PendingPlaybackAction.ReplaceSongs -> playSongs(action.songs, action.index)
+                        is PendingPlaybackAction.PlayNext -> playNext(action.song)
+                        is PendingPlaybackAction.AddToQueue -> addToQueue(action.song)
+                        is PendingPlaybackAction.PlayUrl -> playUrl(action.url)
+                    }
+                }
             }
         }, ContextCompat.getMainExecutor(ctx))
     }
@@ -235,15 +294,35 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             songById = list.associateBy { it.id }
             _songs.value = list
             refreshUi()
+            libraryLoaded = true
+            scheduleAutomaticCloudSync()
         }
     }
 
+    private fun scheduleAutomaticCloudSync() {
+        if (!libraryLoaded || auth.currentUser == null) return
+        autoSyncJob?.cancel()
+        autoSyncJob = viewModelScope.launch {
+            delay(1_200)
+            _cloudSyncStatus.value = "Syncing your library…"
+            runCatching { cloudLibrarySync.sync(_songs.value, playlists, stats) }
+                .onSuccess { _cloudSyncStatus.value = it }
+                .onFailure {
+                    _cloudSyncStatus.value = "Automatic sync unavailable: ${it.localizedMessage ?: "check internet and Firestore rules"}"
+                }
+        }
+    }
+
+    suspend fun syncCloudLibrary(): String = cloudLibrarySync.sync(_songs.value, playlists, stats)
+
     fun songById(id: Long): Song? = songById[id]
 
-    fun importLyrics(songId: Long, uri: Uri, done: () -> Unit) {
+    fun importLyrics(songId: Long, uri: Uri, done: (Boolean) -> Unit) {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { runCatching { lyricsRepo.importFor(songId, uri) } }
-            done()
+            val imported = withContext(Dispatchers.IO) {
+                runCatching { lyricsRepo.importFor(songId, uri) }.getOrDefault(false)
+            }
+            done(imported)
         }
     }
 
@@ -254,8 +333,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------- playback
 
     fun playSongs(list: List<Song>, index: Int) {
-        val c = controller ?: return
         if (list.isEmpty()) return
+        val c = controller
+        if (c == null) {
+            // A new Play request replaces earlier queued edits; later edits are replayed after it.
+            pendingPlayback.clear()
+            pendingPlayback.enqueue(PendingPlaybackAction.ReplaceSongs(list, index.coerceIn(0, list.lastIndex)))
+            return
+        }
         c.setMediaItems(list.map { it.toMediaItem() }, index.coerceIn(0, list.lastIndex), 0L)
         c.prepare()
         c.play()
@@ -340,8 +425,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _backupMsg.value = withContext(Dispatchers.IO) {
                 runCatching {
-                    val text = ctx.contentResolver.openInputStream(uri)!!.use { String(it.readBytes()) }
-                    val r = backup.restore(text, _songs.value, playlists, stats)
+                    val r = ctx.contentResolver.openInputStream(uri)!!.use {
+                        backup.restore(it, _songs.value, playlists, stats)
+                    }
                     "Restored ${r.playlists} playlists, ${r.matched} songs matched, ${r.missing} not found on this phone. " +
                         "Restart the app to apply settings and equalizer."
                 }.getOrElse { "Restore failed: ${it.message}" }
@@ -387,7 +473,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun playUrl(url: String) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            pendingPlayback.clear()
+            pendingPlayback.enqueue(PendingPlaybackAction.PlayUrl(url))
+            return
+        }
         val item = MediaItem.Builder()
             .setMediaId(url)
             .setUri(url)
@@ -404,13 +495,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun playNext(song: Song) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            pendingPlayback.enqueue(PendingPlaybackAction.PlayNext(song))
+            return
+        }
         if (c.mediaItemCount == 0) playSongs(listOf(song), 0)
         else c.addMediaItem(c.currentMediaItemIndex + 1, song.toMediaItem())
     }
 
     fun addToQueue(song: Song) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            pendingPlayback.enqueue(PendingPlaybackAction.AddToQueue(song))
+            return
+        }
         if (c.mediaItemCount == 0) playSongs(listOf(song), 0) else c.addMediaItem(song.toMediaItem())
     }
 
@@ -452,24 +551,38 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private fun restoreSleepVolume() {
+        val original = sleepBaseVolume ?: return
+        runCatching { controller?.volume = original }
+        sleepBaseVolume = null
+    }
+
     fun setSleepTimer(minutes: Int) {
         sleepJob?.cancel()
-        if (minutes <= 0) {
-            _sleepLeft.value = 0L
-            runCatching { controller?.volume = 1f }
-            return
-        }
+        restoreSleepVolume()
+        _sleepLeft.value = 0L
+        val durationMs = PlaybackOptions.sleepDurationMs(minutes)
+        if (durationMs <= 0L) return
+
+        // Preserve the user's current volume and fade relative to it.
+        val baseVolume = controller?.volume ?: 1f
+        sleepBaseVolume = baseVolume
         sleepJob = viewModelScope.launch {
-            var left = minutes * 60_000L
-            while (left > 0) {
+            // elapsedRealtime is monotonic, so timer accuracy is not affected by
+            // wall-clock changes or delays while the coroutine is suspended.
+            val deadline = SystemClock.elapsedRealtime() + durationMs
+            while (true) {
+                val left = PlaybackOptions.remainingMs(deadline, SystemClock.elapsedRealtime())
                 _sleepLeft.value = left
-                if (left <= 15_000L) runCatching { controller?.volume = (left / 15_000f).coerceIn(0f, 1f) }
-                delay(1000)
-                left -= 1000
+                if (left <= 0L) break
+                if (left <= PlaybackOptions.SLEEP_FADE_DURATION_MS) {
+                    runCatching { controller?.volume = PlaybackOptions.sleepVolume(baseVolume, left) }
+                }
+                delay(minOf(1_000L, left))
             }
             _sleepLeft.value = 0L
             controller?.pause()
-            runCatching { controller?.volume = 1f }
+            restoreSleepVolume()
         }
     }
 
@@ -481,6 +594,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        viewModelCleared = true
+        auth.removeAuthStateListener(authListener)
+        autoSyncJob?.cancel()
+        sleepJob?.cancel()
+        sleepJob = null
+        _sleepLeft.value = 0L
+        restoreSleepVolume()
+        pendingPlayback.clear()
         controller?.removeListener(listener)
         controller?.release()
         controller = null

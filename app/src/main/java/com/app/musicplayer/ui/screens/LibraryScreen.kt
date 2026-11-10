@@ -1,6 +1,7 @@
 package com.app.musicplayer.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -117,7 +118,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     }
     val inGroupMode = mode in 1..3
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background)))) {
         Row(
             Modifier.fillMaxWidth().padding(start = 20.dp, top = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -139,11 +140,14 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             }
             IconButton(onClick = { showSettings = true }) { Icon(Icons.Rounded.Settings, "Settings") }
         }
-        Text(
-            "${songs.size} songs on this device", style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 20.dp, bottom = 8.dp),
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            LibraryMetric(Modifier.weight(1f), songs.size.toString(), "TRACKS", Icons.Rounded.MusicNote)
+            LibraryMetric(Modifier.weight(1f), songs.count { stats[it.id]?.favorite == true }.toString(), "FAVORITES", Icons.Rounded.Favorite)
+            LibraryMetric(Modifier.weight(1f), songs.map { it.artist }.distinct().size.toString(), "ARTISTS", Icons.Rounded.GraphicEq)
+        }
         OutlinedTextField(
             value = query, onValueChange = { query = it },
             placeholder = { Text("Search songs, artists, albums") },
@@ -172,7 +176,16 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                 Button(onClick = vm::loadLibrary, modifier = Modifier.padding(top = 16.dp)) { Text("Scan again") }
             }
         } else if (inGroupMode && openGroup == null) {
-            LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp)) {
+            Text(
+                "${groups.size} ${if (mode == 1) "albums" else if (mode == 2) "artists" else "folders"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 20.dp, top = 4.dp, bottom = 4.dp),
+            )
+            LazyColumn(
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
                 itemsIndexed(groups, key = { _, g -> g.key }) { _, g ->
                     GroupRow(g.title, g.subtitle, g.songs.size) { openGroup = g.key }
                 }
@@ -197,18 +210,55 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                 }
             }
             if (shown.isEmpty()) {
-                Text(
-                    when (mode) {
-                        4 -> "No favorites yet. Open a song's menu and tap Favorite."
-                        5 -> "Nothing played yet."
-                        6 -> "Play some songs and your most played will show up here."
-                        else -> "Nothing here."
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(24.dp),
-                )
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 28.dp, vertical = 36.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        Modifier.size(64.dp).clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Rounded.MusicNote, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(30.dp))
+                    }
+                    Text(
+                        when {
+                            query.isNotBlank() -> "No matching tracks"
+                            mode == 4 -> "No favorites yet"
+                            mode == 5 -> "Nothing played yet"
+                            mode == 6 -> "No listening history yet"
+                            else -> "Nothing here yet"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    Text(
+                        when {
+                            query.isNotBlank() -> "Try another title, artist or album name."
+                            mode == 4 -> "Open a song menu and add tracks to your favorites."
+                            mode == 5 || mode == 6 -> "Play a few songs and your listening activity will appear here."
+                            else -> "Your music will appear here when it is available on this device."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 5.dp),
+                    )
+                    if (query.isNotBlank()) {
+                        Text(
+                            "Clear search",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 12.dp).clickable { query = "" },
+                        )
+                    }
+                }
             }
-            LazyColumn(contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp)) {
+            LazyColumn(
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
                 itemsIndexed(shown, key = { _, s -> s.id }) { index, song ->
                     SongRow(
                         song = song,
@@ -231,6 +281,27 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
 }
 
 @Composable
+private fun LibraryMetric(
+    modifier: Modifier,
+    value: String,
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+) {
+    Column(
+        modifier.clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.075f))
+            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp))
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        }
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 3.dp))
+    }
+}
+
+@Composable
 private fun ModePill(label: String, selected: Boolean, onClick: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     Box(
@@ -247,11 +318,18 @@ private fun ModePill(label: String, selected: Boolean, onClick: () -> Unit) {
 private fun GroupRow(title: String, subtitle: String, count: Int, onClick: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.055f))
+            .border(1.dp, Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(accent.copy(0.18f)),
+            Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(
+                Brush.linearGradient(listOf(accent.copy(alpha = 0.34f), accent.copy(alpha = 0.10f)))
+            ),
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Rounded.Folder, null, tint = accent) }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
@@ -274,11 +352,16 @@ private fun SongRow(
     var menu by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (current) accent.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.055f))
+            .border(1.dp, if (current) accent.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(48.dp).clip(CircleShape)
+            Modifier.size(48.dp).clip(RoundedCornerShape(14.dp))
                 .background(Brush.linearGradient(listOf(accent.copy(0.55f), accent.copy(0.15f)))),
             contentAlignment = Alignment.Center,
         ) {
