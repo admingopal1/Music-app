@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -118,23 +119,23 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             bottomBar = {
                 Column {
                     if (tab != 2) MiniPlayer(vm) { tab = 2 }
-                    NavigationBar(
-                        containerColor = Color(0xFF171329).copy(alpha = 0.98f),
-                        tonalElevation = 10.dp,
-                        // Keep Android's gesture/3-button navigation inset inside
-                        // the bar. Zero insets let the last row overlap system Back.
-                        windowInsets = androidx.compose.foundation.layout.WindowInsets.navigationBars,
-                    ) {
-                        primaryTabs.forEach { item ->
-                            NavigationBarItem(
-                                selected = tab == item.destination,
-                                onClick = { showMore = false; tab = item.destination },
-                                icon = { Icon(item.icon, contentDescription = item.label) },
-                                label = { Text(item.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
-                                colors = navColors(),
-                            )
-                        }
-                        Box {
+                    Box {
+                        NavigationBar(
+                            containerColor = Color(0xFF171329).copy(alpha = 0.98f),
+                            tonalElevation = 10.dp,
+                            // Reserve the Android system navigation area so app
+                            // targets cannot overlap the device Back/gesture region.
+                            windowInsets = androidx.compose.foundation.layout.WindowInsets.navigationBars,
+                        ) {
+                            primaryTabs.forEach { item ->
+                                NavigationBarItem(
+                                    selected = tab == item.destination,
+                                    onClick = { showMore = false; tab = item.destination },
+                                    icon = { Icon(item.icon, contentDescription = item.label) },
+                                    label = { Text(item.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                    colors = navColors(),
+                                )
+                            }
                             NavigationBarItem(
                                 selected = tab in moreTabs.map { it.destination },
                                 onClick = { showMore = true },
@@ -142,14 +143,14 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                                 label = { Text("More", maxLines = 1, style = MaterialTheme.typography.labelSmall) },
                                 colors = navColors(),
                             )
-                            DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
-                                moreTabs.forEach { item ->
-                                    DropdownMenuItem(
-                                        text = { Text(item.label) },
-                                        leadingIcon = { Icon(item.icon, contentDescription = null) },
-                                        onClick = { tab = item.destination; showMore = false },
-                                    )
-                                }
+                        }
+                        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                            moreTabs.forEach { item ->
+                                DropdownMenuItem(
+                                    text = { Text(item.label) },
+                                    leadingIcon = { Icon(item.icon, contentDescription = null) },
+                                    onClick = { tab = item.destination; showMore = false },
+                                )
                             }
                         }
                     }
