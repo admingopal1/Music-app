@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
         )
-        setContent { AppRoot() }
+        setContent { FirebaseAuthGate { AppRoot() } }
     }
 }
 
