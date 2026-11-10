@@ -17,6 +17,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.palette.graphics.Palette
+import com.app.musicplayer.ai.SmartEngine
 import com.app.musicplayer.audio.SonyAudioEffects
 import com.app.musicplayer.data.ArtLoader
 import com.app.musicplayer.data.MediaStoreRepository
@@ -108,6 +109,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val fadeSecs: StateFlow<Float> = _fadeSecs.asStateFlow()
     private val _enhancer = MutableStateFlow(EnhancerSettings.read(prefs))
     val enhancer: StateFlow<EnhancerSettings> = _enhancer.asStateFlow()
+    private val _aiDj = MutableStateFlow(prefs.getBoolean("ai_dj", false))
+    val aiDj: StateFlow<Boolean> = _aiDj.asStateFlow()
     private val rgStore = ReplayGainStore(ctx)
     private val _rgMode = MutableStateFlow(prefs.getInt("rg_mode", 0))
     val rgMode: StateFlow<Int> = _rgMode.asStateFlow()
@@ -128,6 +131,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             mediaItem?.mediaId?.toLongOrNull()?.let { stats.recordPlay(it) }
+            extendQueueWithAiDj()
         }
     }
 
@@ -234,6 +238,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             val list = MediaStoreRepository.loadSongs(ctx)
             songById = list.associateBy { it.id }
             _songs.value = list
+            share.library = list
+            share.resolvePlaylists(list, playlists)
             refreshUi()
         }
     }
@@ -315,6 +321,38 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     fun setEnhancer(s: EnhancerSettings) {
         s.write(prefs)
         _enhancer.value = s
+    }
+
+    /** Applies a Hi-Fi engine preset ("Off", "AI Smart", ...), keeping the user's balance / mono choice. */
+    fun applyEnginePreset(name: String) {
+        val p = EnhancerSettings.PRESETS[name] ?: return
+        val cur = _enhancer.value
+        setEnhancer(p.copy(balance = cur.balance, mono = cur.mono, limiter = cur.limiter, preset = name))
+    }
+
+    /** Manual tweak of an engine control: marks the preset as custom. */
+    fun tweakEnhancer(s: EnhancerSettings) = setEnhancer(s.copy(preset = EnhancerSettings.CUSTOM))
+
+    fun setAiDj(on: Boolean) {
+        prefs.edit().putBoolean("ai_dj", on).apply()
+        _aiDj.value = on
+        if (on) extendQueueWithAiDj()
+    }
+
+    /** AI DJ: when the last song in the queue starts, append songs that fit it so the music never stops. */
+    private fun extendQueueWithAiDj() {
+        val c = controller ?: return
+        if (!_aiDj.value || c.mediaItemCount == 0 || c.hasNextMediaItem() || c.repeatMode != Player.REPEAT_MODE_OFF) return
+        val seed = c.currentMediaItem?.mediaId?.toLongOrNull()?.let { songById[it] } ?: return
+        val inQueue = (0 until c.mediaItemCount).mapNotNull { c.getMediaItemAt(it).mediaId.toLongOrNull() }.toSet()
+        val picks = SmartEngine.similar(seed, _songs.value, stats.stats.value, inQueue, count = 5)
+        if (picks.isNotEmpty()) c.addMediaItems(picks.map { it.toMediaItem() })
+    }
+
+    /** Plays [song] followed by songs the taste model thinks fit it. */
+    fun startAiRadio(song: Song) {
+        val picks = SmartEngine.similar(song, _songs.value, stats.stats.value, setOf(song.id), count = 25)
+        playSongs(listOf(song) + picks, 0)
     }
 
     /** 0 = off. Read by the playback service. */

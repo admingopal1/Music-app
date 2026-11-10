@@ -14,32 +14,45 @@ import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.webkit.MimeTypeMap
+import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
+import com.app.musicplayer.data.PlaylistStore
+import com.app.musicplayer.data.Song
 import com.app.musicplayer.service.ShareService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.DataInputStream
 import java.io.File
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.RandomAccessFile
 import java.net.Inet4Address
 import java.net.HttpURLConnection
 import java.net.NetworkInterface
 import java.net.URL
 import java.net.URLEncoder
+import java.security.DigestInputStream
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Local-network sharing (same Wi-Fi or a phone hotspot):
  *  - Receive: runs a PIN-protected web server (QR + nearby discovery). Another phone with this app, or any browser/PC, can send files.
  *  - Send: push files to a receiver (scan its QR / pick it from nearby / enter address) or offer them as downloads via a link.
+ *  - App-to-app transfers run 3 at a time, are end-to-end encrypted (see [SecureChannel]), resume after a dropped
+ *    connection, are verified with SHA-256 and skip files the receiver already has.
  */
 class ShareManager private constructor(context: Context) {
     private val app: Context = context.applicationContext
@@ -47,14 +60,25 @@ class ShareManager private constructor(context: Context) {
     val ui: StateFlow<ShareUi> = _ui.asStateFlow()
 
     private val ids = AtomicLong(1)
-    private val sendExec = Executors.newSingleThreadExecutor()
+    private val sendExec = Executors.newFixedThreadPool(PARALLEL_SENDS)
+    private val prefs = app.getSharedPreferences("share", Context.MODE_PRIVATE)
     private val cancelled: MutableSet<Long> = Collections.newSetFromMap(ConcurrentHashMap())
     private val connections = ConcurrentHashMap<Long, HttpURLConnection>()
     private val failures = HashMap<String, Pair<Int, Long>>()
 
     private var server: ShareServer? = null
     private var pin = ""
+    /** Receiver key for this session; its fingerprint goes into the QR code so scanning senders can detect a MITM. */
+    private var sessionKp: java.security.KeyPair? = null
+    private var sessionFp = ""
     @Volatile private var accepting = false
+
+    /** Music library exposed to the web player; kept current by the view model. */
+    @Volatile var library: List<Song> = emptyList()
+
+    init {
+        update { copy(askBeforeReceive = prefs.getBoolean("ask_before_receive", true), items = loadHistory()) }
+    }
 
     // ------------------------------------------------------------------ small helpers
 
@@ -108,6 +132,7 @@ class ShareManager private constructor(context: Context) {
         server = s
         accepting = true
         pin = String.format("%06d", SecureRandom().nextInt(1_000_000))
+        sessionKp = SecureChannel.newKeyPair().also { sessionFp = SecureChannel.fingerprint(SecureChannel.encodePub(it)) }
         update { copy(sessionRunning = true, port = port, pin = pin, message = null) }
         refreshNetwork()
         registerNsd(port)
@@ -120,9 +145,16 @@ class ShareManager private constructor(context: Context) {
         server = null
         accepting = false
         pin = ""
+        sessionKp = null
+        sessionFp = ""
         unregisterNsd()
         stopHotspot()
-        update { copy(sessionRunning = false, urls = emptyList(), pin = "", hotspot = null) }
+        approved.clear()
+        sessions.clear()
+        waiting.values.forEach { it.countDown() }
+        waiting.clear()
+        ShareService.clearRequest(app)
+        update { copy(sessionRunning = false, urls = emptyList(), pin = "", hotspot = null, approvals = emptyList()) }
         maybeStopService()
     }
 
@@ -131,7 +163,7 @@ class ShareManager private constructor(context: Context) {
         val st = _ui.value
         if (!st.sessionRunning) return
         val ips = localAddresses()
-        val urls = ips.map { "http://$it:${st.port}/?pin=${st.pin}&n=${enc(st.deviceName)}" }
+        val urls = ips.map { "http://$it:${st.port}/?pin=${st.pin}&n=${enc(st.deviceName)}&fp=$sessionFp" }
         update { copy(urls = urls) }
         if (ips.isEmpty()) msg("Connect to Wi-Fi (or start the hotspot) so other devices can reach this phone.")
         else if (_ui.value.message?.startsWith("Connect to Wi-Fi") == true) msg(null)
@@ -177,6 +209,198 @@ class ShareManager private constructor(context: Context) {
 
     fun acceptingUploads(): Boolean = accepting
 
+    // ------------------------------------------------------------------ approval (ask before receiving)
+
+    private val approved = ConcurrentHashMap<String, Boolean>()
+    private val waiting = ConcurrentHashMap<String, CountDownLatch>()
+
+    fun setAskBeforeReceive(on: Boolean) {
+        prefs.edit().putBoolean("ask_before_receive", on).apply()
+        update { copy(askBeforeReceive = on) }
+    }
+
+    /**
+     * true = allowed, false = declined, null = still waiting for the user.
+     * With [block] the caller waits (up to a minute) for the user to answer the prompt on this phone.
+     */
+    fun approval(ip: String, from: String, block: Boolean): Boolean? {
+        if (!_ui.value.askBeforeReceive) return true
+        approved[ip]?.let { return it }
+        val latch = waiting.computeIfAbsent(ip) {
+            update { copy(approvals = approvals.filterNot { a -> a.ip == ip } + ApprovalRequest(ip, from.ifBlank { ip })) }
+            ShareService.notifyRequest(app, from.ifBlank { ip })
+            CountDownLatch(1)
+        }
+        if (!block) return null
+        latch.await(60, TimeUnit.SECONDS)
+        return approved[ip]
+    }
+
+    fun decide(ip: String, allow: Boolean) {
+        approved[ip] = allow
+        waiting.remove(ip)?.countDown()
+        update { copy(approvals = approvals.filterNot { it.ip == ip }) }
+        if (_ui.value.approvals.isEmpty()) ShareService.clearRequest(app)
+    }
+
+    // ------------------------------------------------------------------ secure, resumable receive (app to app)
+
+    private val sessions = ConcurrentHashMap<String, ByteArray>()
+    private val keyItems = ConcurrentHashMap<String, Long>()
+    private val partialDir by lazy { File(app.cacheDir, "incoming").apply { mkdirs() } }
+
+    private fun partial(key: String) = File(partialDir, key.filter { it.isLetterOrDigit() }.take(64).ifEmpty { "x" })
+
+    /** Key exchange; returns the JSON reply for the sender. */
+    fun hello(peerPub: String): String {
+        val kp = sessionKp ?: throw IOException("Not receiving")
+        val key = SecureChannel.deriveKey(kp, peerPub, pin)
+        val sid = SecureChannel.hex(ByteArray(16).also { SecureRandom().nextBytes(it) })
+        sessions[sid] = key
+        return JSONObject().put("sid", sid).put("pub", SecureChannel.encodePub(kp)).put("name", deviceName()).toString()
+    }
+
+    fun hasSession(sid: String) = sessions.containsKey(sid)
+
+    /** Bytes already received for [key] (to resume), or -1 when this phone already has the file. */
+    fun status(key: String, name: String, size: Long, print: String?): Long {
+        if (!print.isNullOrBlank() && alreadyHave(name, size, print)) return -1L
+        val f = partial(key)
+        return if (f.exists()) f.length().coerceAtMost(size) else 0L
+    }
+
+    /** Same name, size *and* content fingerprint, so a different track that happens to match by name/size is still sent. */
+    private fun alreadyHave(name: String, size: Long, print: String): Boolean {
+        if (size <= 0) return false
+        fun same(uri: Uri) = runCatching { openUri(uri)?.use { SecureChannel.quickPrint(it, size) } }.getOrNull() == print
+        val received = _ui.value.items.any {
+            it.direction == Direction.IN && it.status == Status.DONE && it.name == name && it.size == size && it.uri != null && same(it.uri)
+        }
+        if (received) return true
+        val mime = guessMime(name)
+        val collection = when {
+            mime.startsWith("audio/") -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            mime.startsWith("video/") -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            else -> return false
+        }
+        return try {
+            val ids = ArrayList<Long>()
+            app.contentResolver.query(
+                collection, arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.SIZE}=?", arrayOf(name, size.toString()), null,
+            )?.use { c -> while (c.moveToNext()) ids += c.getLong(0) }
+            ids.any { same(android.content.ContentUris.withAppendedId(collection, it)) }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun itemForKey(key: String, name: String, size: Long, from: String, secure: Boolean): Long {
+        val existing = keyItems[key]?.takeIf { id -> _ui.value.items.any { it.id == id } }
+        if (existing != null) return existing
+        val item = newItem(name, size, Direction.IN, from, null, guessMime(name))
+        setItem(item.id) { copy(secure = secure) }
+        keyItems[key] = item.id
+        return item.id
+    }
+
+    /**
+     * Appends one (encrypted) upload body to the partial file for [key], starting at plaintext [offset].
+     * Returns the number of bytes now stored, or -1 for an unknown session.
+     */
+    fun receivePart(key: String, name: String, size: Long, offset: Long, sid: String?, input: InputStream, from: String): Long {
+        val aes = sid?.let { sessions[it] ?: return -1L }
+        val id = itemForKey(key, name, size, from, aes != null)
+        ShareService.start(app)
+        val f = partial(key)
+        RandomAccessFile(f, "rw").use { it.setLength(offset.coerceAtMost(it.length())) }
+        var done = f.length()
+        if (done != offset) return done
+        val tracker = Tracker(id, done)
+        setItem(id) { copy(status = Status.ACTIVE, done = offset, error = null, note = null) }
+        try {
+            java.io.FileOutputStream(f, true).buffered(256 * 1024).use { out ->
+                if (aes != null) {
+                    val din = DataInputStream(input)
+                    while (done < size) {
+                        if (id in cancelled) throw IOException("cancelled")
+                        val plain = SecureChannel.readFrame(aes, din) ?: break
+                        out.write(plain)
+                        done += plain.size
+                        tracker.add(done)
+                    }
+                } else {
+                    val buf = ByteArray(256 * 1024)
+                    while (done < size) {
+                        if (id in cancelled) throw IOException("cancelled")
+                        val n = input.read(buf, 0, minOf(buf.size.toLong(), size - done).toInt())
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        tracker.add(done)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            val wasCancelled = id in cancelled
+            if (wasCancelled) f.delete()
+            setItem(id) {
+                copy(
+                    status = if (wasCancelled) Status.CANCELLED else Status.QUEUED, speedBps = 0,
+                    done = f.length(), note = if (wasCancelled) null else "Paused, will resume",
+                )
+            }
+            maybeStopService()
+            return f.length()
+        }
+        setItem(id) { copy(done = done) }
+        return done
+    }
+
+    /** Verifies the SHA-256 of a fully received file and saves it. 0 = saved, 1 = checksum mismatch, 2 = incomplete. */
+    fun finish(key: String, name: String, size: Long, sha: String, from: String): Int {
+        val f = partial(key)
+        val id = itemForKey(key, name, size, from, false)
+        try {
+            if (!f.exists() || f.length() != size) return 2
+            val d = MessageDigest.getInstance("SHA-256")
+            f.inputStream().use { ins ->
+                val buf = ByteArray(256 * 1024)
+                while (true) { val n = ins.read(buf); if (n < 0) break; d.update(buf, 0, n) }
+            }
+            if (!SecureChannel.sha256Hex(d).equals(sha, ignoreCase = true)) {
+                f.delete()
+                setItem(id) { copy(status = Status.QUEUED, done = 0, note = "Checksum mismatch, resending") }
+                return 1
+            }
+            if (name.endsWith(PLAYLIST_EXT)) {
+                storePendingPlaylist(f.readText())
+                setItem(id) { copy(status = Status.DONE, speedBps = 0, done = size, note = "Playlist will appear in Playlists") }
+                update { copy(playlistsReceived = playlistsReceived + 1) }
+                return 0
+            }
+            val mime = guessMime(name)
+            val target = createIncoming(name, mime) ?: throw IOException("Can't create the file on this phone")
+            try {
+                target.out.use { out -> f.inputStream().use { it.copyTo(out, 256 * 1024) } }
+                target.finish()
+            } catch (e: Exception) {
+                target.discard()
+                throw e
+            }
+            f.delete()
+            keyItems.remove(key)
+            setItem(id) { copy(status = Status.DONE, uri = target.uri, speedBps = 0, done = size, note = "Verified (SHA-256)") }
+            if (mime.startsWith("audio/") || mime.startsWith("video/")) update { copy(libraryChanged = libraryChanged + 1) }
+            return 0
+        } catch (e: Exception) {
+            setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = e.message) }
+            return 2
+        } finally {
+            maybeStopService()
+        }
+    }
+
     // ------------------------------------------------------------------ files to send / offer
 
     fun addOutgoing(uris: List<Uri>) {
@@ -215,8 +439,47 @@ class ShareManager private constructor(context: Context) {
         return item
     }
 
-    private fun setItem(id: Long, f: TransferItem.() -> TransferItem) =
-        update { copy(items = items.map { if (it.id == id) it.f() else it }) }
+    private fun setItem(id: Long, f: TransferItem.() -> TransferItem) {
+        var finished = false
+        update {
+            copy(items = items.map {
+                if (it.id == id) it.f().also { n -> finished = n.status.terminal && (!it.status.terminal || n.note != it.note) } else it
+            })
+        }
+        if (finished) saveHistory()
+    }
+
+    private val Status.terminal get() = this == Status.DONE || this == Status.FAILED || this == Status.CANCELLED
+
+    private fun saveHistory() {
+        val arr = JSONArray()
+        _ui.value.items.filter { it.status.terminal }.take(100).forEach {
+            arr.put(
+                JSONObject().put("name", it.name).put("size", it.size).put("dir", it.direction.name).put("peer", it.peer)
+                    .put("status", it.status.name).put("uri", it.uri?.toString() ?: "").put("mime", it.mime)
+                    .put("error", it.error ?: "").put("note", it.note ?: "").put("secure", it.secure).put("time", it.time),
+            )
+        }
+        prefs.edit().putString("history", arr.toString()).apply()
+    }
+
+    private fun loadHistory(): List<TransferItem> = try {
+        val arr = JSONArray(prefs.getString("history", "[]"))
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            val size = o.optLong("size")
+            val status = Status.valueOf(o.optString("status"))
+            TransferItem(
+                ids.getAndIncrement(), o.optString("name"), size, Direction.valueOf(o.optString("dir")), o.optString("peer"),
+                done = if (status == Status.DONE) size else 0L, status = status,
+                uri = o.optString("uri").takeIf { it.isNotEmpty() }?.let(Uri::parse), mime = o.optString("mime"),
+                error = o.optString("error").ifEmpty { null }, note = o.optString("note").ifEmpty { null },
+                secure = o.optBoolean("secure"), time = o.optLong("time"),
+            )
+        }
+    } catch (e: Exception) {
+        emptyList()
+    }
 
     fun cancel(id: Long) {
         cancelled.add(id)
@@ -226,6 +489,7 @@ class ShareManager private constructor(context: Context) {
 
     fun clearHistory() {
         update { copy(items = items.filter { it.status == Status.ACTIVE || it.status == Status.QUEUED }) }
+        saveHistory()
     }
 
     private fun maybeStopService() {
@@ -382,11 +646,20 @@ class ShareManager private constructor(context: Context) {
         val host = u.host
         val pinParam = u.getQueryParameter("pin")
         if ((u.scheme == "http") && !host.isNullOrBlank() && !pinParam.isNullOrBlank()) {
-            Peer(u.getQueryParameter("n") ?: host, host, if (u.port > 0) u.port else 80) to pinParam
+            val fp = u.getQueryParameter("fp")?.filter { it.isLetterOrDigit() }.orEmpty()
+            Peer(u.getQueryParameter("n") ?: host, host, if (u.port > 0) u.port else 80, fp) to pinParam
         } else null
     } catch (e: Exception) {
         null
     }
+
+    private data class SendJob(val peer: Peer, val pin: String, val file: OutFile)
+    private class FatalSend(msg: String) : IOException(msg)
+    private class LegacyReceiver : Exception("Receiver runs an older app version")
+    private class PeerSession(val sid: String, val key: ByteArray)
+
+    private val jobs = ConcurrentHashMap<Long, SendJob>()
+    private val peerSessions = ConcurrentHashMap<String, PeerSession>()
 
     fun sendOutgoingTo(peer: Peer, pin: String) {
         val files = _ui.value.outgoing
@@ -397,32 +670,213 @@ class ShareManager private constructor(context: Context) {
         ShareService.start(app)
         for (f in files) {
             val item = newItem(f.name, f.size, Direction.OUT, peer.name, f.uri, f.mime)
-            sendExec.execute { sendOne(peer, pin, f, item.id) }
+            jobs[item.id] = SendJob(peer, pin, f)
+            sendExec.execute { sendOne(item.id) }
         }
         clearOutgoing()
     }
 
-    private fun sendOne(peer: Peer, pin: String, f: OutFile, id: Long) {
-        if (id in cancelled) return
-        setItem(id) { copy(status = Status.ACTIVE) }
-        var conn: HttpURLConnection? = null
+    /** Re-queues a failed or cancelled send; it resumes where it stopped. */
+    fun retry(id: Long) {
+        if (jobs[id] == null) return
+        cancelled.remove(id)
+        setItem(id) { copy(status = Status.QUEUED, error = null, note = null, speedBps = 0) }
+        ShareService.start(app)
+        sendExec.execute { sendOne(id) }
+    }
+
+    fun canRetry(id: Long) = jobs.containsKey(id)
+
+    private fun sendOne(id: Long) {
+        val job = jobs[id] ?: return
+        var attempt = 0
+        var legacy = false
         try {
-            val url = URL("http://${peer.host}:${peer.port}/upload?pin=${enc(pin)}&name=${enc(f.name)}&from=${enc(deviceName())}")
-            val c = url.openConnection() as HttpURLConnection
-            conn = c
-            c.requestMethod = "PUT"
+            while (true) {
+                if (id in cancelled) return
+                setItem(id) { copy(status = Status.ACTIVE, error = null) }
+                try {
+                    if (job.file.size > 0 && !legacy) {
+                        try {
+                            sendResumable(job, id)
+                        } catch (e: LegacyReceiver) {
+                            legacy = true
+                            sendLegacy(job, id)
+                        }
+                    } else {
+                        legacy = true
+                        sendLegacy(job, id)
+                    }
+                    return
+                } catch (e: FatalSend) {
+                    setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = e.message, note = null) }
+                    return
+                } catch (e: Exception) {
+                    if (id in cancelled) {
+                        setItem(id) { copy(status = Status.CANCELLED, speedBps = 0, note = null) }
+                        return
+                    }
+                    // Legacy uploads can't resume or be de-duplicated, so a blind retry could save a second copy.
+                    if (legacy || ++attempt >= MAX_ATTEMPTS) {
+                        setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = e.message ?: "Connection failed", note = null) }
+                        return
+                    }
+                    setItem(id) { copy(speedBps = 0, note = "Connection dropped, resuming… ($attempt/${MAX_ATTEMPTS - 1})") }
+                    Thread.sleep(1500L * attempt)
+                }
+            }
+        } finally {
+            connections.remove(id)
+            maybeStopService()
+        }
+    }
+
+    private fun base(job: SendJob) = "http://${job.peer.host}:${job.peer.port}"
+
+    /** Sessions are per receiver address *and* PIN, so a restarted receiver (new PIN) gets a fresh key exchange. */
+    private fun sessionKey(job: SendJob) = "${job.peer.host}:${job.peer.port}:${job.pin}"
+
+    private fun open(url: String, method: String, readTimeout: Int = 30_000): HttpURLConnection =
+        (URL(url).openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = 6000
+            this.readTimeout = readTimeout
+        }
+
+    private fun HttpURLConnection.body(): String =
+        (if (responseCode < 400) inputStream else errorStream)?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
+
+    /** Gets (or creates) an encrypted session with the receiver. Null when the receiver runs an older app version. */
+    private fun session(job: SendJob): PeerSession? {
+        val k = sessionKey(job)
+        peerSessions[k]?.let { return it }
+        synchronized(peerSessions) {
+            peerSessions[k]?.let { return it }
+            val kp = SecureChannel.newKeyPair()
+            val c = open(
+                "${base(job)}/hello?pin=${enc(job.pin)}&from=${enc(deviceName())}&pub=${SecureChannel.encodePub(kp)}", "POST", 75_000,
+            )
+            try {
+                c.doOutput = true
+                c.setFixedLengthStreamingMode(0)
+                c.outputStream.close()
+                when (c.responseCode) {
+                    200 -> {}
+                    404 -> return null
+                    403 -> throw FatalSend(c.body().ifBlank { "Wrong PIN or the receiver declined" })
+                    else -> throw IOException("Receiver answered ${c.responseCode}")
+                }
+                val j = JSONObject(c.body())
+                val fp = job.peer.fp
+                if (fp.isNotEmpty() && !SecureChannel.fingerprint(j.getString("pub")).equals(fp, ignoreCase = true)) {
+                    throw FatalSend("Security check failed: this receiver's key doesn't match its QR code")
+                }
+                val s = PeerSession(j.getString("sid"), SecureChannel.deriveKey(kp, j.getString("pub"), job.pin))
+                peerSessions[k] = s
+                return s
+            } finally {
+                c.disconnect()
+            }
+        }
+    }
+
+    private fun sendResumable(job: SendJob, id: Long) {
+        val f = job.file
+        val s = session(job) ?: throw LegacyReceiver()
+        val key = SecureChannel.hex(
+            MessageDigest.getInstance("SHA-256").digest("${deviceName()}|${f.uri}|${f.name}|${f.size}".toByteArray()),
+        ).take(32)
+        val print = runCatching { openUri(f.uri)?.use { SecureChannel.quickPrint(it, f.size) } }.getOrNull().orEmpty()
+        val q = "pin=${enc(job.pin)}&key=$key&name=${enc(f.name)}&size=${f.size}&sid=${s.sid}&from=${enc(deviceName())}&qp=$print"
+
+        // 1. how much does the receiver already have?
+        val st = open("${base(job)}/status?$q", "GET")
+        val have = try {
+            if (st.responseCode == 401) { peerSessions.remove(sessionKey(job)); throw IOException("Session expired") }
+            if (st.responseCode == 403) throw FatalSend(st.body().ifBlank { "Wrong PIN or the receiver declined" })
+            if (st.responseCode != 200) throw IOException("Receiver answered ${st.responseCode}")
+            JSONObject(st.body()).getLong("have")
+        } finally {
+            st.disconnect()
+        }
+        if (have < 0) {
+            setItem(id) { copy(status = Status.DONE, speedBps = 0, done = size, note = "Already on ${job.peer.name}, skipped", secure = true) }
+            return
+        }
+
+        // 2. upload the rest (encrypted), hashing the whole file on the way
+        val digest = MessageDigest.getInstance("SHA-256")
+        val input = app.contentResolver.openInputStream(f.uri) ?: throw FatalSend("Can't read the file")
+        DigestInputStream(input.buffered(256 * 1024), digest).use { ins ->
+            val skipBuf = ByteArray(256 * 1024)
+            var skipped = 0L
+            while (skipped < have) {
+                val n = ins.read(skipBuf, 0, minOf(skipBuf.size.toLong(), have - skipped).toInt())
+                if (n < 0) throw FatalSend("File changed while sending")
+                skipped += n
+            }
+            if (have < f.size) {
+                setItem(id) { copy(done = have, secure = true, note = if (have > 0) "Resumed at ${fmtSize(have)}" else null) }
+                val c = open("${base(job)}/upload2?$q&offset=$have", "PUT", 120_000)
+                connections[id] = c
+                try {
+                    c.doOutput = true
+                    c.setFixedLengthStreamingMode(SecureChannel.encryptedLength(f.size - have))
+                    c.setRequestProperty("Content-Type", "application/octet-stream")
+                    val tracker = Tracker(id, have)
+                    c.outputStream.use { out ->
+                        SecureChannel.encrypt(s.key, ins, out, f.size - have) { n ->
+                            if (id in cancelled) throw IOException("cancelled")
+                            tracker.add(have + n)
+                        }
+                    }
+                    when (c.responseCode) {
+                        200 -> {}
+                        401 -> { peerSessions.remove(sessionKey(job)); throw IOException("Session expired") }
+                        403 -> throw FatalSend(c.body().ifBlank { "Receiver declined" })
+                        else -> throw IOException("Receiver answered ${c.responseCode}")
+                    }
+                } finally {
+                    connections.remove(id)
+                    c.disconnect()
+                }
+            }
+            // drain anything left so the hash covers the whole file
+            while (ins.read(skipBuf) >= 0) Unit
+        }
+
+        // 3. receiver verifies the checksum and saves the file
+        val fin = open("${base(job)}/finish?$q&sha=${SecureChannel.sha256Hex(digest)}", "POST", 120_000)
+        try {
+            fin.doOutput = true
+            fin.setFixedLengthStreamingMode(0)
+            fin.outputStream.close()
+            when (fin.responseCode) {
+                200 -> setItem(id) { copy(status = Status.DONE, speedBps = 0, done = size, note = "Encrypted · verified (SHA-256)") }
+                409 -> throw IOException("Checksum mismatch, resending")
+                403 -> throw FatalSend(fin.body().ifBlank { "Receiver declined" })
+                else -> throw IOException("Receiver answered ${fin.responseCode}")
+            }
+        } finally {
+            fin.disconnect()
+        }
+    }
+
+    /** Plain single-request upload: unknown file size, or a receiver running an older app version. */
+    private fun sendLegacy(job: SendJob, id: Long) {
+        val f = job.file
+        val c = open("${base(job)}/upload?pin=${enc(job.pin)}&name=${enc(f.name)}&from=${enc(deviceName())}", "PUT", 120_000)
+        connections[id] = c
+        try {
             c.doOutput = true
-            c.connectTimeout = 6000
-            c.readTimeout = 120_000
             if (f.size > 0) c.setFixedLengthStreamingMode(f.size) else c.setChunkedStreamingMode(64 * 1024)
             c.setRequestProperty("Content-Type", "application/octet-stream")
-            connections[id] = c
-            val input = app.contentResolver.openInputStream(f.uri) ?: throw IOException("Can't read the file")
+            val input = app.contentResolver.openInputStream(f.uri) ?: throw FatalSend("Can't read the file")
             val tracker = Tracker(id)
+            var done = 0L
             input.use { ins ->
                 c.outputStream.use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    var done = 0L
+                    val buf = ByteArray(256 * 1024)
                     while (true) {
                         if (id in cancelled) throw IOException("cancelled")
                         val n = ins.read(buf)
@@ -431,28 +885,99 @@ class ShareManager private constructor(context: Context) {
                         done += n
                         tracker.add(done)
                     }
-                    setItem(id) { copy(done = done) }
                 }
             }
             when (val code = c.responseCode) {
                 200 -> setItem(id) { copy(status = Status.DONE, speedBps = 0, done = if (size > 0) size else done) }
-                403 -> setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = "Wrong PIN or receiver is not accepting files") }
-                else -> setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = "Receiver answered $code") }
-            }
-        } catch (e: Exception) {
-            val wasCancelled = id in cancelled
-            setItem(id) {
-                copy(
-                    status = if (wasCancelled) Status.CANCELLED else Status.FAILED, speedBps = 0,
-                    error = if (wasCancelled) null else (e.message ?: "Connection failed"),
-                )
+                403 -> throw FatalSend(c.body().ifBlank { "Wrong PIN or receiver is not accepting files" })
+                else -> throw IOException("Receiver answered $code")
             }
         } finally {
             connections.remove(id)
-            conn?.disconnect()
-            maybeStopService()
+            c.disconnect()
         }
     }
+
+    // ------------------------------------------------------------------ smart music share
+
+    /** Queues a playlist's songs plus a small manifest so the receiver can rebuild the playlist. */
+    fun sharePlaylist(name: String, songs: List<Song>) {
+        if (songs.isEmpty()) return
+        addOutgoing(songs.map { it.uri })
+        val json = JSONObject().put("name", name).put(
+            "songs",
+            JSONArray().apply {
+                songs.forEach { put(JSONObject().put("file", it.fileName).put("title", it.title).put("artist", it.artist)) }
+            },
+        )
+        val dir = File(app.cacheDir, "outgoing").apply { mkdirs() }
+        val file = File(dir, name.replace(Regex("[^A-Za-z0-9 _-]"), "_").take(60) + PLAYLIST_EXT)
+        file.writeText(json.toString())
+        val out = OutFile(ids.getAndIncrement(), Uri.fromFile(file), file.name, file.length(), "application/json")
+        update { copy(outgoing = outgoing.filterNot { it.name == out.name } + out) }
+    }
+
+    private fun storePendingPlaylist(text: String) {
+        val j = runCatching { JSONObject(text) }.getOrNull() ?: return
+        val arr = runCatching { JSONArray(prefs.getString("pending_playlists", "[]")) }.getOrDefault(JSONArray())
+        arr.put(j.put("received", System.currentTimeMillis()))
+        prefs.edit().putString("pending_playlists", arr.toString()).apply()
+    }
+
+    /** Creates received playlists from songs now in the library. Unmatched songs are retried for 2 days. */
+    fun resolvePlaylists(songs: List<Song>, store: PlaylistStore): Int {
+        val arr = runCatching { JSONArray(prefs.getString("pending_playlists", "[]")) }.getOrDefault(JSONArray())
+        if (arr.length() == 0 || songs.isEmpty()) return 0
+        val byFile = songs.groupBy { it.fileName.lowercase() }
+        val byTitle = songs.groupBy { (it.title + "|" + it.artist).lowercase() }
+        val keep = JSONArray()
+        var created = 0
+        for (i in 0 until arr.length()) {
+            val p = arr.getJSONObject(i)
+            val name = p.optString("name").ifBlank { "Shared playlist" }
+            val list = p.optJSONArray("songs") ?: JSONArray()
+            val ids = ArrayList<Long>()
+            var missing = 0
+            for (k in 0 until list.length()) {
+                val e = list.getJSONObject(k)
+                val match = byFile[e.optString("file").lowercase()]?.firstOrNull()
+                    ?: byTitle[(e.optString("title") + "|" + e.optString("artist")).lowercase()]?.firstOrNull()
+                if (match != null) ids += match.id else missing++
+            }
+            if (ids.isNotEmpty()) {
+                // First time: pick a name that doesn't clash with the user's own playlists, and remember it
+                // so later passes (songs still arriving) keep filling the same playlist.
+                val target = p.optString("target").ifBlank {
+                    var n = name
+                    var k = 2
+                    while (store.lists.value.containsKey(n)) n = if (k == 2) "$name (shared)".also { k++ } else "$name (shared ${k++ - 1})"
+                    p.put("target", n)
+                    n
+                }
+                store.create(target)
+                ids.forEach { store.addSong(target, it) }
+                created++
+            }
+            val fresh = System.currentTimeMillis() - p.optLong("received") < 2 * 86_400_000L
+            if (missing > 0 && fresh) keep.put(p)
+        }
+        prefs.edit().putString("pending_playlists", keep.toString()).apply()
+        return created
+    }
+
+    // ------------------------------------------------------------------ web player
+
+    fun song(id: Long): Song? = library.firstOrNull { it.id == id }
+
+    fun sizeOf(uri: Uri): Long = try {
+        app.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else -1L
+        } ?: -1L
+    } catch (e: Exception) {
+        -1L
+    }
+
+    fun openUri(uri: Uri): InputStream? = try { app.contentResolver.openInputStream(uri) } catch (e: Exception) { null }
 
     // ------------------------------------------------------------------ nearby discovery (NSD)
 
@@ -567,6 +1092,13 @@ class ShareManager private constructor(context: Context) {
         }
         if (hotspot != null) return
         startSession()
+        startHotspotO()
+    }
+
+    @SuppressLint("MissingPermission")
+    @Suppress("DEPRECATION")
+    @RequiresApi(26)
+    private fun startHotspotO() {
         try {
             val wm = app.getSystemService(Context.WIFI_SERVICE) as WifiManager
             wm.startLocalOnlyHotspot(object : WifiManager.LocalOnlyHotspotCallback() {
@@ -597,13 +1129,16 @@ class ShareManager private constructor(context: Context) {
     }
 
     fun stopHotspot() {
-        runCatching { hotspot?.close() }
+        if (Build.VERSION.SDK_INT >= 26) runCatching { hotspot?.close() }
         hotspot = null
         update { copy(hotspot = null) }
     }
 
     companion object {
         private const val SERVICE_TYPE = "_musicshare._tcp."
+        private const val PARALLEL_SENDS = 3
+        private const val MAX_ATTEMPTS = 4
+        const val PLAYLIST_EXT = ".mplaylist.json"
 
         @Volatile private var instance: ShareManager? = null
         fun get(context: Context): ShareManager =

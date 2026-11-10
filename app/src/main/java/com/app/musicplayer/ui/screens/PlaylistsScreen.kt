@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -39,7 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.app.musicplayer.ui.PlayerViewModel
 
 @Composable
-fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
+fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit, onOpenShare: () -> Unit = {}) {
     val lists by vm.playlists.lists.collectAsStateWithLifecycle()
     var showCreate by remember { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
@@ -80,6 +81,10 @@ fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                         IconButton(onClick = { vm.playPlaylist(name); onOpenPlayer() }, enabled = ids.isNotEmpty()) {
                             Icon(Icons.Rounded.PlayArrow, "Play playlist")
                         }
+                        IconButton(
+                            onClick = { vm.share.sharePlaylist(name, ids.mapNotNull { vm.songById(it) }); onOpenShare() },
+                            enabled = ids.isNotEmpty(),
+                        ) { Icon(Icons.Rounded.Share, "Send playlist to a nearby phone") }
                         IconButton(onClick = { vm.playlists.delete(name) }) { Icon(Icons.Rounded.Delete, "Delete playlist") }
                     }
                     AnimatedVisibility(isOpen) {

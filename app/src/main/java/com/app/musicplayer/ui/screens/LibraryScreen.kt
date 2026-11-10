@@ -55,17 +55,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.app.musicplayer.ai.SmartEngine
 import com.app.musicplayer.data.Song
 import com.app.musicplayer.data.asClock
 import com.app.musicplayer.ui.PlayerViewModel
 
 private val SORT_LABELS = listOf("Title", "Artist", "Album", "Duration (longest first)")
-private val MODES = listOf("Songs", "Albums", "Artists", "Folders", "Favorites", "Recent", "Most played", "New")
+private val MODES = listOf("Songs", "Albums", "Artists", "Folders", "Favorites", "Recent", "Most played", "New", "For You", "Rediscover")
+
+/** Pill order on screen (indices into [MODES]); the AI mixes sit right after "Songs". */
+private val MODE_ORDER = listOf(0, 8, 9, 1, 2, 3, 4, 5, 6, 7)
 
 private data class Group(val key: String, val title: String, val subtitle: String, val songs: List<Song>)
 
 @Composable
-fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
+fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit, onOpenShare: () -> Unit = {}) {
     val songs by vm.songs.collectAsStateWithLifecycle()
     val ui by vm.ui.collectAsStateWithLifecycle()
     val playlists by vm.playlists.lists.collectAsStateWithLifecycle()
@@ -76,13 +80,12 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
     var sortMenu by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var ringtoneFor by remember { mutableStateOf<Song?>(null) }
     var showStream by remember { mutableStateOf(false) }
 
     val sorted = remember(songs, query, sortIdx) {
-        val base = if (query.isBlank()) songs
-        else songs.filter {
-            it.title.contains(query, true) || it.artist.contains(query, true) || it.album.contains(query, true)
-        }
+        if (query.isNotBlank()) return@remember SmartEngine.search(songs, query)  // best match first
+        val base = songs
         when (sortIdx) {
             1 -> base.sortedBy { it.artist.lowercase() }
             2 -> base.sortedBy { it.album.lowercase() }
@@ -99,6 +102,8 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             6 -> sorted.filter { (stats[it.id]?.plays ?: 0) > 0 }
                 .sortedByDescending { stats[it.id]?.plays ?: 0 }.take(100)
             7 -> sorted.sortedByDescending { it.dateAdded }.take(100)
+            8 -> SmartEngine.forYou(sorted, stats)
+            9 -> SmartEngine.rediscover(sorted, stats)
             else -> null
         }
     }
@@ -146,7 +151,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
         )
         OutlinedTextField(
             value = query, onValueChange = { query = it },
-            placeholder = { Text("Search songs, artists, albums") },
+            placeholder = { Text("Smart search: songs, artists, albums (typos OK)") },
             leadingIcon = { Icon(Icons.Rounded.Search, null) },
             singleLine = true, shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
@@ -155,8 +160,8 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MODES.forEachIndexed { i, label ->
-                ModePill(label, mode == i) { mode = i; openGroup = null }
+            MODE_ORDER.forEach { i ->
+                ModePill(MODES[i], mode == i) { mode = i; openGroup = null }
             }
         }
 
@@ -202,6 +207,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                         4 -> "No favorites yet. Open a song's menu and tap Favorite."
                         5 -> "Nothing played yet."
                         6 -> "Play some songs and your most played will show up here."
+                        9 -> "Songs you loved but haven't played in 3+ weeks will show up here."
                         else -> "Nothing here."
                     },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -219,6 +225,9 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                         onFavorite = { vm.stats.toggleFavorite(song.id) },
                         onPlayNext = { vm.playNext(song) },
                         onAddToQueue = { vm.addToQueue(song) },
+                        onRadio = { vm.startAiRadio(song); onOpenPlayer() },
+                        onRingtone = { ringtoneFor = song },
+                        onSend = { vm.share.addOutgoing(listOf(song.uri)); onOpenShare() },
                         onAddToPlaylist = { vm.playlists.addSong(it, song.id) },
                     )
                 }
@@ -227,6 +236,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     }
 
     if (showSettings) SettingsDialog(vm) { showSettings = false }
+    ringtoneFor?.let { RingtoneCutterDialog(vm, it) { ringtoneFor = null } }
     if (showStream) StreamDialog(onPlay = { vm.playUrl(it); onOpenPlayer() }) { showStream = false }
 }
 
@@ -269,7 +279,7 @@ private fun GroupRow(title: String, subtitle: String, count: Int, onClick: () ->
 private fun SongRow(
     song: Song, current: Boolean, favorite: Boolean, playlistNames: List<String>,
     onClick: () -> Unit, onFavorite: () -> Unit, onPlayNext: () -> Unit, onAddToQueue: () -> Unit,
-    onAddToPlaylist: (String) -> Unit,
+    onRadio: () -> Unit, onRingtone: () -> Unit, onSend: () -> Unit, onAddToPlaylist: (String) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
@@ -309,6 +319,9 @@ private fun SongRow(
                 )
                 DropdownMenuItem(text = { Text("Play next") }, onClick = { onPlayNext(); menu = false })
                 DropdownMenuItem(text = { Text("Add to queue") }, onClick = { onAddToQueue(); menu = false })
+                DropdownMenuItem(text = { Text("Start AI radio (similar songs)") }, onClick = { onRadio(); menu = false })
+                DropdownMenuItem(text = { Text("Make ringtone (AI cutter)") }, onClick = { onRingtone(); menu = false })
+                DropdownMenuItem(text = { Text("Send to nearby phone") }, onClick = { onSend(); menu = false })
                 if (playlistNames.isEmpty()) {
                     DropdownMenuItem(text = { Text("Create a playlist first") }, onClick = { menu = false }, enabled = false)
                 } else {

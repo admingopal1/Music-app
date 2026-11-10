@@ -54,6 +54,7 @@ import com.app.musicplayer.ui.screens.MiniPlayer
 import com.app.musicplayer.ui.screens.PlaylistsScreen
 import com.app.musicplayer.ui.screens.VideosScreen
 import com.app.musicplayer.ui.screens.ShareScreen
+import com.app.musicplayer.ui.screens.ShareApprovalDialog
 import com.app.musicplayer.ui.theme.MusicTheme
 
 class MainActivity : ComponentActivity() {
@@ -73,6 +74,8 @@ private data class Tab(val label: String, val icon: ImageVector)
 private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     val accent by vm.accent.collectAsStateWithLifecycle()
     val amoled by vm.amoled.collectAsStateWithLifecycle()
+    val shareUi by vm.share.ui.collectAsStateWithLifecycle()
+    shareUi.approvals.firstOrNull()?.let { req -> ShareApprovalDialog(req) { vm.share.decide(req.ip, it) } }
 
     val permissions = rememberPermissions()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -124,10 +127,10 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                     label = "tabs",
                 ) { t ->
                     when (t) {
-                        0 -> LibraryScreen(vm, onOpenPlayer = { tab = 1 })
+                        0 -> LibraryScreen(vm, onOpenPlayer = { tab = 1 }, onOpenShare = { tab = 5 })
                         1 -> PlayerScreen(vm)
-                        2 -> EqualizerScreen(vm.fx)
-                        3 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 1 })
+                        2 -> EqualizerScreen(vm)
+                        3 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 1 }, onOpenShare = { tab = 5 })
                         4 -> VideosScreen(vm)
                         else -> ShareScreen(vm)
                     }

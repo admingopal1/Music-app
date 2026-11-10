@@ -17,6 +17,8 @@ data class TransferItem(
     val uri: Uri? = null,
     val mime: String = "application/octet-stream",
     val error: String? = null,
+    val note: String? = null,
+    val secure: Boolean = false,
     val time: Long = System.currentTimeMillis(),
 ) {
     val progress: Float get() = if (size > 0) (done.toFloat() / size).coerceIn(0f, 1f) else 0f
@@ -26,7 +28,11 @@ data class TransferItem(
 /** A file the user picked to send / offer for download. */
 data class OutFile(val id: Long, val uri: Uri, val name: String, val size: Long, val mime: String)
 
-data class Peer(val name: String, val host: String, val port: Int)
+/** [fp] = receiver key fingerprint from its QR code; when present the key exchange is authenticated against it. */
+data class Peer(val name: String, val host: String, val port: Int, val fp: String = "")
+
+/** A device asking to send files / open the web player; the user accepts or declines it once per session. */
+data class ApprovalRequest(val ip: String, val from: String)
 
 data class HotspotInfo(val ssid: String, val password: String)
 
@@ -42,4 +48,7 @@ data class ShareUi(
     val hotspot: HotspotInfo? = null,
     val message: String? = null,
     val libraryChanged: Int = 0,
+    val approvals: List<ApprovalRequest> = emptyList(),
+    val askBeforeReceive: Boolean = true,
+    val playlistsReceived: Int = 0,
 )

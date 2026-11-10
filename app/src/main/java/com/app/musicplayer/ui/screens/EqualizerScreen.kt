@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.app.musicplayer.audio.SonyAudioEffects
+import com.app.musicplayer.ui.PlayerViewModel
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
@@ -57,7 +58,8 @@ import kotlin.math.sin
 private val REVERB_NAMES = listOf("Off", "Small room", "Medium room", "Large room", "Medium hall", "Large hall", "Plate")
 
 @Composable
-fun EqualizerScreen(fx: SonyAudioEffects) {
+fun EqualizerScreen(vm: PlayerViewModel) {
+    val fx = vm.fx
     val s by fx.state.collectAsStateWithLifecycle()
     var profileName by rememberSaveable { mutableStateOf("") }
     val on = s.enabled && s.available
@@ -78,6 +80,10 @@ fun EqualizerScreen(fx: SonyAudioEffects) {
             }
             Switch(checked = s.enabled, onCheckedChange = { fx.setEnabled(it) })
         }
+
+        HiFiEngineCard(vm)
+
+        Text("Hardware equalizer", style = MaterialTheme.typography.titleMedium)
 
         // Presets + saved profiles
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
