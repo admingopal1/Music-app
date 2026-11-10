@@ -42,7 +42,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.app.musicplayer.data.CloudLibrarySync
 import com.app.musicplayer.data.asClock
 import com.app.musicplayer.ui.PlayerViewModel
 
@@ -58,7 +57,7 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     var cloudBusy by remember { mutableStateOf(false) }
     var cloudMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val cloudSync = remember { CloudLibrarySync() }
+    val autoCloudStatus by vm.cloudSyncStatus.collectAsState()
     val selected = songs.filter { it.id in resultIds }
 
     fun runPrompt(raw: String) {
@@ -148,13 +147,13 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                         cloudMessage = "Syncing…"
                         scope.launch {
                             cloudMessage = runCatching {
-                                cloudSync.sync(songs, vm.playlists, vm.stats)
+                                vm.syncCloudLibrary()
                             }.getOrElse { "Sync failed: ${it.localizedMessage ?: "Check internet, sign-in and Firestore rules."}" }
                             cloudBusy = false
                         }
                     }) { Text(if (cloudBusy) "Syncing…" else "Sync now") }
                 }
-                cloudMessage?.let { Text(it, color = Color(0xFFE3A7FF), style = MaterialTheme.typography.bodySmall) }
+                (cloudMessage ?: autoCloudStatus)?.let { Text(it, color = Color(0xFFE3A7FF), style = MaterialTheme.typography.bodySmall) }
             }
         }
         Card(
