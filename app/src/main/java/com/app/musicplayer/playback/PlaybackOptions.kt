@@ -36,4 +36,7 @@ object PlaybackOptions {
         if (remainingMs <= 0L) return 0f
         return (remainingMs.toFloat() / SLEEP_FADE_DURATION_MS).coerceIn(0f, 1f)
     }
+
+    fun sleepVolume(baseVolume: Float, remainingMs: Long): Float =
+        baseVolume.coerceIn(0f, 1f) * sleepFadeVolume(remainingMs)
 }
