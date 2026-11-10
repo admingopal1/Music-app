@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -65,7 +66,7 @@ fun VideosScreen(vm: PlayerViewModel) {
         else videos.filter { it.title.contains(query, true) || it.folder.contains(query, true) }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background)))) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             if (!showDownloads && !showYouTube) Button(onClick = { showDownloads = false; showYouTube = false }) { Text("My videos") }
             else TextButton(onClick = { showDownloads = false; showYouTube = false }) { Text("My videos") }
@@ -83,7 +84,7 @@ fun VideosScreen(vm: PlayerViewModel) {
             return@Column
         }
         Text(
-            "Videos", style = MaterialTheme.typography.headlineMedium,
+            "Video Universe", style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(start = 20.dp, top = 12.dp, end = 20.dp),
         )
         Text(
