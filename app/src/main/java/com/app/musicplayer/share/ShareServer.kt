@@ -53,6 +53,9 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
             ?: "file"
         val name = sanitize(raw)
         val length = session.headers["content-length"]?.toLongOrNull() ?: -1L
+        if (length > ShareManager.MAX_UPLOAD_BYTES) {
+            return text(Status.lookup(413) ?: Status.INTERNAL_ERROR, "File exceeds the 2 GiB upload limit.")
+        }
         val from = session.parms["from"]?.takeIf { it.isNotBlank() } ?: ip.ifBlank { "device" }
         val ok = mgr.receiveStream(name, length, session.inputStream, from)
         val r = if (ok) json("{\"ok\":true}") else text(Status.INTERNAL_ERROR, "Receive failed")
