@@ -23,7 +23,7 @@ class BackupManager(private val ctx: Context) {
         val byId = songs.associateBy { it.id }
         val root = JSONObject()
         root.put("app", "com.app.musicplayer")
-        root.put("version", 1)
+        root.put("version", 2)
         root.put("created", System.currentTimeMillis())
 
         val used = LinkedHashSet<Long>()
@@ -47,7 +47,7 @@ class BackupManager(private val ctx: Context) {
 
         val st = JSONObject()
         for ((id, s) in stats) {
-            if (byId.containsKey(id)) st.put(id.toString(), "${if (s.favorite) 1 else 0},${s.rating},${s.plays},${s.lastPlayed}")
+            if (byId.containsKey(id)) st.put(id.toString(), "${if (s.favorite) 1 else 0},${s.rating},${s.plays},${s.lastPlayed},${s.updatedAt}")
         }
         root.put("stats", st)
 
@@ -112,6 +112,9 @@ class BackupManager(private val ctx: Context) {
                 rating = if (rating > 0) rating else old.rating,
                 plays = max(old.plays, p[2].toIntOrNull() ?: 0),
                 lastPlayed = max(old.lastPlayed, p[3].toLongOrNull() ?: 0L),
+                // Older backup files have no timestamp; treat an explicit restore as
+                // a fresh local edit so cloud sync can resolve it deterministically.
+                updatedAt = max(old.updatedAt, p.getOrNull(4)?.toLongOrNull() ?: System.currentTimeMillis()),
             )
         }
         statsStore.putAll(updates)
