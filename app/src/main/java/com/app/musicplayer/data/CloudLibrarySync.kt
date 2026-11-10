@@ -176,14 +176,17 @@ class CloudLibrarySync(
             // it exactly is required for removals to propagate to this device.
             restoredLists[name] = ids
         }
-        // Do not overwrite edits made locally while the network sync was in flight.
-        // The debounced StateFlow observer will schedule another sync for those edits.
-        val playlistsUnchanged = playlists.lists.value == localLists &&
-            playlists.updatedAt.value == localUpdated &&
-            playlists.deletedAt.value == localDeletedAt
-        if (playlistsUnchanged) {
-            playlists.applyCloudMerge(restoredLists, mergedUpdatedAt, boundedDeletedAt)
-        }
+        // Check and apply under the PlaylistStore lock so a local edit cannot
+        // slip between the snapshot comparison and the cloud merge.
+        // The debounced StateFlow observer schedules another sync if this returns false.
+        playlists.applyCloudMergeIfUnchanged(
+            expectedLists = localLists,
+            expectedUpdated = localUpdated,
+            expectedDeleted = localDeletedAt,
+            mergedLists = restoredLists,
+            mergedUpdated = mergedUpdatedAt,
+            mergedDeleted = boundedDeletedAt,
+        )
 
         val updates = HashMap<Long, SongStats>()
         val expectedUpdatedAt = HashMap<Long, Long>()
