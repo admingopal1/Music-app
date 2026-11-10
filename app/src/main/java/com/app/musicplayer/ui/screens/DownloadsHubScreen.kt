@@ -22,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.OpenInBrowser
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Button
@@ -242,11 +244,44 @@ fun DownloadsHubScreen() {
                         Text(item.title, maxLines = 2, fontWeight = FontWeight.SemiBold)
                         Text(item.status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         if (item.total > 0) {
+                            val progress = (item.downloaded.toFloat() / item.total.toFloat()).coerceIn(0f, 1f)
+                            androidx.compose.material3.LinearProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
                             Text(
                                 "${formatBytes(item.downloaded)} / ${formatBytes(item.total)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (item.status == "Completed") {
+                                TextButton(onClick = {
+                                    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                    val uri = manager.getUriForDownloadedFile(item.id)
+                                    if (uri != null) {
+                                        val mime = context.contentResolver.getType(uri) ?: "*/*"
+                                        runCatching {
+                                            context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
+                                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+                                        }.onFailure {
+                                            Toast.makeText(context, "No app found to open this file", Toast.LENGTH_LONG).show()
+                                        }
+                                    } else Toast.makeText(context, "Downloaded file is unavailable", Toast.LENGTH_LONG).show()
+                                }) {
+                                    Icon(Icons.Rounded.OpenInNew, contentDescription = null)
+                                    Text("Open")
+                                }
+                            }
+                            TextButton(onClick = {
+                                val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                manager.remove(item.id)
+                                refresh()
+                            }) {
+                                Icon(Icons.Rounded.Delete, contentDescription = null)
+                                Text(if (item.status == "Completed" || item.status == "Failed") "Remove" else "Cancel")
+                            }
                         }
                     }
                 }
