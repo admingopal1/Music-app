@@ -37,6 +37,7 @@ import com.app.musicplayer.data.toMediaItem
 import com.app.musicplayer.service.MusicService
 import com.app.musicplayer.playback.MediaPlayerManager
 import com.app.musicplayer.playback.PlaybackOptions
+import com.app.musicplayer.playback.PendingPlaybackQueue
 import com.app.musicplayer.share.ShareManager
 import com.app.musicplayer.ui.theme.ACCENT_CHOICES
 import com.app.musicplayer.ui.theme.DefaultAccent
@@ -142,8 +143,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val rgLimit: StateFlow<Boolean> = _rgLimit.asStateFlow()
 
     private var controller: MediaController? = null
-    // Keep the user's first play request if the MediaSession connection is still starting.
-    private var pendingPlayback: Pair<List<Song>, Int>? = null
+
+    private sealed interface PendingPlaybackAction {
+        data class ReplaceSongs(val songs: List<Song>, val index: Int) : PendingPlaybackAction
+        data class PlayNext(val song: Song) : PendingPlaybackAction
+        data class AddToQueue(val song: Song) : PendingPlaybackAction
+        data class PlayUrl(val url: String) : PendingPlaybackAction
+    }
+
+    // Retain queue requests until the MediaSession controller is connected.
+    private val pendingPlayback = PendingPlaybackQueue<PendingPlaybackAction>()
     private var songById: Map<Long, Song> = emptyMap()
     private var artFor: Long? = null
     private var artJob: Job? = null
@@ -190,10 +199,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 controller = c
                 c.addListener(listener)
                 refreshUi()
-                // Avoid a silent no-op when a user taps Play before the service connects.
-                pendingPlayback?.let { (list, index) ->
-                    pendingPlayback = null
-                    playSongs(list, index)
+                // Replay queued actions in order after the MediaSession is ready.
+                pendingPlayback.drain().forEach { action ->
+                    when (action) {
+                        is PendingPlaybackAction.ReplaceSongs -> playSongs(action.songs, action.index)
+                        is PendingPlaybackAction.PlayNext -> playNext(action.song)
+                        is PendingPlaybackAction.AddToQueue -> addToQueue(action.song)
+                        is PendingPlaybackAction.PlayUrl -> playUrl(action.url)
+                    }
                 }
             }
         }, ContextCompat.getMainExecutor(ctx))
@@ -315,10 +328,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (list.isEmpty()) return
         val c = controller
         if (c == null) {
-            pendingPlayback = list to index.coerceIn(0, list.lastIndex)
+            // A new Play request replaces earlier queued edits; later edits are replayed after it.
+            pendingPlayback.clear()
+            pendingPlayback.enqueue(PendingPlaybackAction.ReplaceSongs(list, index.coerceIn(0, list.lastIndex)))
             return
         }
-        pendingPlayback = null
         c.setMediaItems(list.map { it.toMediaItem() }, index.coerceIn(0, list.lastIndex), 0L)
         c.prepare()
         c.play()
@@ -450,7 +464,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun playUrl(url: String) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            pendingPlayback.clear()
+            pendingPlayback.enqueue(PendingPlaybackAction.PlayUrl(url))
+            return
+        }
         val item = MediaItem.Builder()
             .setMediaId(url)
             .setUri(url)
@@ -467,13 +486,21 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun playNext(song: Song) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            pendingPlayback.enqueue(PendingPlaybackAction.PlayNext(song))
+            return
+        }
         if (c.mediaItemCount == 0) playSongs(listOf(song), 0)
         else c.addMediaItem(c.currentMediaItemIndex + 1, song.toMediaItem())
     }
 
     fun addToQueue(song: Song) {
-        val c = controller ?: return
+        val c = controller
+        if (c == null) {
+            pendingPlayback.enqueue(PendingPlaybackAction.AddToQueue(song))
+            return
+        }
         if (c.mediaItemCount == 0) playSongs(listOf(song), 0) else c.addMediaItem(song.toMediaItem())
     }
 
@@ -564,7 +591,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         sleepJob = null
         _sleepLeft.value = 0L
         restoreSleepVolume()
-        pendingPlayback = null
+        pendingPlayback.clear()
         controller?.removeListener(listener)
         controller?.release()
         controller = null
