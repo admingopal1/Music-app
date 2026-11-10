@@ -6,6 +6,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -58,19 +59,25 @@ fun YouTubeHubScreen() {
     }
 
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), Color(0xFF090912))))) {
-        Surface(color = Color(0xFF211936).copy(alpha = 0.96f), tonalElevation = 8.dp, shadowElevation = 8.dp) {
+        Surface(
+            color = Color(0xFF211936).copy(alpha = 0.98f),
+            tonalElevation = 8.dp,
+            shadowElevation = 8.dp,
+            shape = RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp),
+        ) {
             Column(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("Video Discovery", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("YouTube Studio", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("Search and watch on YouTube", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.62f))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     OutlinedTextField(
                         value = searchText,
                         onValueChange = { searchText = it },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         placeholder = { Text("Search any video on YouTube") },
                         leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                     )
