@@ -425,8 +425,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _backupMsg.value = withContext(Dispatchers.IO) {
                 runCatching {
-                    val text = ctx.contentResolver.openInputStream(uri)!!.use { String(it.readBytes()) }
-                    val r = backup.restore(text, _songs.value, playlists, stats)
+                    val r = ctx.contentResolver.openInputStream(uri)!!.use {
+                        backup.restore(it, _songs.value, playlists, stats)
+                    }
                     "Restored ${r.playlists} playlists, ${r.matched} songs matched, ${r.missing} not found on this phone. " +
                         "Restart the app to apply settings and equalizer."
                 }.getOrElse { "Restore failed: ${it.message}" }

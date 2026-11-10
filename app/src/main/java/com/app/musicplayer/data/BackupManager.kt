@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.InputStream
+import java.io.ByteArrayOutputStream
 import kotlin.math.abs
 import kotlin.math.max
 
@@ -62,6 +64,21 @@ class BackupManager(private val ctx: Context) {
         for (name in prefFiles) prefsJson.put(name, dumpPrefs(ctx.getSharedPreferences(name, Context.MODE_PRIVATE)))
         root.put("prefs", prefsJson)
         return root.toString()
+    }
+
+    /** Read an import stream with a strict byte cap before allocating the JSON string. */
+    fun restore(input: InputStream, songs: List<Song>, playlistStore: PlaylistStore, statsStore: StatsStore): RestoreResult {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(8 * 1024)
+        var total = 0L
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            total += count
+            require(total <= MAX_BACKUP_BYTES) { "Backup is too large to restore safely." }
+            output.write(buffer, 0, count)
+        }
+        return restore(String(output.toByteArray(), Charsets.UTF_8), songs, playlistStore, statsStore)
     }
 
     fun restore(json: String, songs: List<Song>, playlistStore: PlaylistStore, statsStore: StatsStore): RestoreResult {
@@ -251,5 +268,6 @@ class BackupManager(private val ctx: Context) {
 
     private companion object {
         const val MAX_BACKUP_CHARS = 5 * 1024 * 1024
+        const val MAX_BACKUP_BYTES = 5L * 1024 * 1024
     }
 }
