@@ -37,6 +37,9 @@ object PlaybackOptions {
         return (remainingMs.toFloat() / SLEEP_FADE_DURATION_MS).coerceIn(0f, 1f)
     }
 
-    fun sleepVolume(baseVolume: Float, remainingMs: Long): Float =
-        baseVolume.coerceIn(0f, 1f) * sleepFadeVolume(remainingMs)
+    fun sleepVolume(baseVolume: Float, remainingMs: Long): Float {
+        // A malformed/non-finite volume must never propagate into Media3's player.
+        val safeBase = if (baseVolume.isFinite()) baseVolume.coerceIn(0f, 1f) else 1f
+        return safeBase * sleepFadeVolume(remainingMs)
+    }
 }
