@@ -39,6 +39,7 @@ import com.app.musicplayer.ui.theme.ACCENT_CHOICES
 import com.app.musicplayer.ui.theme.DefaultAccent
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,6 +66,7 @@ data class PlayerUi(
     val pitch: Float = 1f,
 )
 
+@OptIn(FlowPreview::class)
 class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     private val ctx = app.applicationContext
