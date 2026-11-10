@@ -176,7 +176,7 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
             val result = withContext(Dispatchers.Default) {
                 runCatching {
                     RingtoneEngine.export(
-                        ctx, song.uri, startMs, endMs, if (fadeIn) 1500 else 30, if (fadeOut) 2000 else 30,
+                        ctx, song.uri, startMs, endMs, if (fadeIn) 1500 else 0, if (fadeOut) 2000 else 0,
                         title, song.artist, type,
                     )
                 }
