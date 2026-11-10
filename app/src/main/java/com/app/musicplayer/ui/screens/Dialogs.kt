@@ -57,6 +57,7 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     val amoled by vm.amoled.collectAsStateWithLifecycle()
     val dynamic by vm.dynamicColors.collectAsStateWithLifecycle()
     val skip by vm.skipSilence.collectAsStateWithLifecycle()
+    val aiDj by vm.aiDj.collectAsStateWithLifecycle()
     val accentIdx by vm.accentIdx.collectAsStateWithLifecycle()
     val lyricsFolder by vm.lyricsRepo.folder.collectAsStateWithLifecycle()
     val rgMode by vm.rgMode.collectAsStateWithLifecycle()
@@ -85,6 +86,7 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                 SettingSwitch("AMOLED black theme", amoled, vm::setAmoled)
                 SettingSwitch("Colours from album art", dynamic, vm::setDynamicColors)
                 SettingSwitch("Skip silence", skip, vm::setSkipSilence)
+                SettingSwitch("AI DJ (keeps the music going with similar songs)", aiDj, vm::setAiDj)
                 Text("ReplayGain (even volume across songs)", style = MaterialTheme.typography.labelLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf("Off", "Track", "Album").forEachIndexed { i, label ->
@@ -121,7 +123,7 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text("Sound", style = MaterialTheme.typography.labelLarge)
-                TextButton(onClick = { showEnhancer = true }) { Text("Sound enhancer (clarity, crossfeed, width, balance)") }
+                TextButton(onClick = { showEnhancer = true }) { Text("Sound enhancer (balance, mono, limiter) · full Hi-Fi engine is in EQ & DSP") }
                 Text("Backup & restore", style = MaterialTheme.typography.labelLarge)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { exportPicker.launch("music-player-backup.json") }) { Text("Backup") }
@@ -162,16 +164,16 @@ private fun EnhancerDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
         dismissButton = { TextButton(onClick = { vm.setEnhancer(EnhancerSettings()) }) { Text("Reset") } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                EnhSlider("Clarity (treble detail)", "%.0f%%".format(s.clarity * 100), s.clarity, 0f..1f) { vm.setEnhancer(s.copy(clarity = it)) }
-                EnhSlider("Headphone crossfeed", "%.0f%%".format(s.crossfeed * 100), s.crossfeed, 0f..1f) { vm.setEnhancer(s.copy(crossfeed = it)) }
-                EnhSlider("Stereo width", if (s.width == 1f) "Normal" else "%.0f%%".format(s.width * 100), s.width, 0f..2f) { vm.setEnhancer(s.copy(width = it)) }
+                EnhSlider("Clarity (treble detail)", "%.0f%%".format(s.clarity * 100), s.clarity, 0f..1f) { vm.tweakEnhancer(s.copy(clarity = it)) }
+                EnhSlider("Headphone crossfeed", "%.0f%%".format(s.crossfeed * 100), s.crossfeed, 0f..1f) { vm.tweakEnhancer(s.copy(crossfeed = it)) }
+                EnhSlider("Stereo width", if (s.width == 1f) "Normal" else "%.0f%%".format(s.width * 100), s.width, 0f..2f) { vm.tweakEnhancer(s.copy(width = it)) }
                 EnhSlider(
                     "Balance",
                     when { s.balance < -0.02f -> "L %.0f%%".format(-s.balance * 100); s.balance > 0.02f -> "R %.0f%%".format(s.balance * 100); else -> "Centre" },
                     s.balance, -1f..1f,
                 ) { vm.setEnhancer(s.copy(balance = it)) }
                 SettingSwitch("Mono output", s.mono) { vm.setEnhancer(s.copy(mono = it)) }
-                SettingSwitch("Soft limiter (prevents clipping)", s.limiter) { vm.setEnhancer(s.copy(limiter = it)) }
+                SettingSwitch("Look-ahead limiter always on (prevents clipping)", s.limiter) { vm.setEnhancer(s.copy(limiter = it)) }
                 Text(
                     "Works with the equalizer and ReplayGain on 16-bit and float stereo playback.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -182,7 +184,7 @@ private fun EnhancerDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun EnhSlider(label: String, valueText: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
+internal fun EnhSlider(label: String, valueText: String, value: Float, range: ClosedFloatingPointRange<Float>, onChange: (Float) -> Unit) {
     Column {
         Row(Modifier.fillMaxWidth()) {
             Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
@@ -216,7 +218,7 @@ private fun StepRow(label: String, value: Float, onChange: (Float) -> Unit) {
 }
 
 @Composable
-private fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun SettingSwitch(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f))
         Switch(checked = checked, onCheckedChange = onChange)

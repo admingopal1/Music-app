@@ -126,7 +126,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                     when (t) {
                         0 -> LibraryScreen(vm, onOpenPlayer = { tab = 1 })
                         1 -> PlayerScreen(vm)
-                        2 -> EqualizerScreen(vm.fx)
+                        2 -> EqualizerScreen(vm)
                         3 -> PlaylistsScreen(vm, onOpenPlayer = { tab = 1 })
                         4 -> VideosScreen(vm)
                         else -> ShareScreen(vm)
