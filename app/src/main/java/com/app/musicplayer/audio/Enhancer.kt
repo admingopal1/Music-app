@@ -3,6 +3,7 @@ package com.app.musicplayer.audio
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.media3.common.C
+import com.app.musicplayer.CrashLog
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
@@ -60,7 +61,26 @@ class EnhancerProcessor : BaseAudioProcessor() {
         return inputAudioFormat
     }
 
-    override fun queueInput(inputBuffer: ByteBuffer) {
+override fun queueInput(inputBuffer: ByteBuffer) {
+        if (DspGuard.bypass) {
+            val passthrough = replaceOutputBuffer(inputBuffer.remaining())
+            passthrough.put(inputBuffer)
+            passthrough.flip()
+            return
+        }
+        val start = inputBuffer.position()
+        try {
+            process(inputBuffer)
+        } catch (e: RuntimeException) {
+            CrashLog.record("EnhancerProcessor", e)
+            inputBuffer.position(start)
+            val out = replaceOutputBuffer(inputBuffer.remaining())
+            out.put(inputBuffer)
+            out.flip()
+        }
+    }
+
+    private fun process(inputBuffer: ByteBuffer) {
         val size = inputBuffer.remaining()
         if (size == 0) return
         val out = replaceOutputBuffer(size)

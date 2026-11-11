@@ -48,8 +48,11 @@ class MusicApp : Application() {
  */
 object CrashLog {
     private const val FILE_NAME = "last_crash.txt"
+    private var appContext: Context? = null
+    @Volatile private var recordedThisSession = false
 
     fun install(app: Application) {
+        appContext = app.applicationContext
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try {
@@ -63,6 +66,17 @@ object CrashLog {
             }
             previous?.uncaughtException(thread, error)
         }
+    }
+
+    fun record(label: String, error: Throwable) {
+        val ctx = appContext ?: return
+        if (recordedThisSession) return
+        recordedThisSession = true
+        try {
+            val trace = StringWriter().also { error.printStackTrace(PrintWriter(it)) }.toString()
+            val header = "Non-fatal error: $label\nTime: ${Date()}\nDevice: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})\n\n"
+            File(ctx.filesDir, FILE_NAME).writeText((header + trace).take(20_000))
+        } catch (_: Throwable) { }
     }
 
     fun read(context: Context): String? = try {

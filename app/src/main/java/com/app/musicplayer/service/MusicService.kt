@@ -8,6 +8,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
@@ -15,9 +16,11 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.app.musicplayer.MainActivity
+import com.app.musicplayer.CrashLog
 import com.app.musicplayer.audio.SonyAudioEffects
 import com.app.musicplayer.audio.AudioLevelProcessor
 import com.app.musicplayer.audio.AudioLevelMonitor
+import com.app.musicplayer.audio.DspGuard
 import com.app.musicplayer.audio.EnhancerController
 import com.app.musicplayer.audio.EnhancerProcessor
 import com.app.musicplayer.audio.FadeController
@@ -37,10 +40,22 @@ class MusicService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // Use Media3's stock audio sink while isolating the runtime playback failure.
-        // Custom PCM processors are temporarily bypassed; their implementations remain in the project.
+        val rgProcessor = ReplayGainProcessor()
+        val enhancerProcessor = EnhancerProcessor()
+        val audioLevelProcessor = AudioLevelProcessor()
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf<AudioProcessor>(rgProcessor, enhancerProcessor, audioLevelProcessor))
+                .build()
+        }
 
-        val player = ExoPlayer.Builder(this)
+        val player = ExoPlayer.Builder(this, renderers)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -54,6 +69,7 @@ class MusicService : MediaSessionService() {
 
         // "Skip silence" is toggled from Settings via the shared preferences file.
         val prefs = getSharedPreferences("settings", MODE_PRIVATE)
+        DspGuard.bypass = prefs.getBoolean("dsp_bypass", false)
         player.skipSilenceEnabled = prefs.getBoolean("skip_silence", false)
         val l = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
             if (key == "skip_silence") player.skipSilenceEnabled = sp.getBoolean("skip_silence", false)
@@ -69,6 +85,29 @@ class MusicService : MediaSessionService() {
             }
         })
         fx.attach(player.audioSessionId)
+
+        player.addListener(object : Player.Listener {
+            private var errorStreak = 0
+            override fun onPlayerError(error: PlaybackException) {
+                CrashLog.record("Playback error " + error.errorCodeName, error)
+                if (error.errorCode == PlaybackException.ERROR_CODE_FAILED_RUNTIME_CHECK && !DspGuard.bypass) {
+                    DspGuard.bypass = true
+                    prefs.edit().putBoolean("dsp_bypass", true).apply()
+                    player.prepare()
+                    player.play()
+                    return
+                }
+                errorStreak++
+                if (errorStreak <= 3 && player.hasNextMediaItem()) {
+                    player.seekToNextMediaItem()
+                    player.prepare()
+                    player.play()
+                }
+            }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) errorStreak = 0
+            }
+        })
 
         // Keeps the home screen widgets in sync with what is playing.
         widgetBridge = WidgetBridge(this, player)
