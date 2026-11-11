@@ -18,6 +18,7 @@ import androidx.media3.session.MediaSessionService
 import com.app.musicplayer.MainActivity
 import com.app.musicplayer.CrashLog
 import com.app.musicplayer.audio.SonyAudioEffects
+import com.app.musicplayer.playback.SleepTimer
 import com.app.musicplayer.audio.AudioLevelProcessor
 import com.app.musicplayer.audio.AudioLevelMonitor
 import com.app.musicplayer.audio.DspGuard
@@ -66,6 +67,8 @@ class MusicService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
+
+        SleepTimer.attach(player)
 
         // "Skip silence" is toggled from Settings via the shared preferences file.
         val prefs = getSharedPreferences("settings", MODE_PRIVATE)
@@ -131,6 +134,7 @@ class MusicService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        SleepTimer.detach()
         enhancerController?.release()
         enhancerController = null
         fadeController?.release()

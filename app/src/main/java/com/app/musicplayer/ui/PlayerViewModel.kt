@@ -38,6 +38,7 @@ import com.app.musicplayer.data.toMediaItem
 import com.app.musicplayer.service.MusicService
 import com.app.musicplayer.playback.MediaPlayerManager
 import com.app.musicplayer.playback.PlaybackOptions
+import com.app.musicplayer.playback.SleepTimer
 import com.app.musicplayer.playback.PendingPlaybackQueue
 import com.app.musicplayer.share.ShareManager
 import com.app.musicplayer.ui.theme.ACCENT_CHOICES
@@ -97,14 +98,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val accentSecondary: StateFlow<Color> = _accentSecondary.asStateFlow()
 
     // ---- VLC-style extras: A-B repeat, sleep timer, colour mode
+    private var countedPlayId: Long? = null
     private val _abA = MutableStateFlow(-1L)
     val abA: StateFlow<Long> = _abA.asStateFlow()
     private val _abB = MutableStateFlow(-1L)
     val abB: StateFlow<Long> = _abB.asStateFlow()
-    private val _sleepLeft = MutableStateFlow(0L)
-    val sleepLeftMs: StateFlow<Long> = _sleepLeft.asStateFlow()
-    private var sleepJob: Job? = null
-    private var sleepBaseVolume: Float? = null
+    // The sleep timer lives in the playback service (SleepTimer), so it survives closing the app.
+    val sleepLeftMs: StateFlow<Long> = SleepTimer.leftMs
 
     private val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val _dynamic = MutableStateFlow(prefs.getBoolean("dynamic_colors", false))
@@ -178,7 +178,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            mediaItem?.mediaId?.toLongOrNull()?.let { stats.recordPlay(it) }
+            // Counted later by the position loop, once the song has really been listened to.
+            countedPlayId = null
         }
     }
 
@@ -201,6 +202,16 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 if (c != null && c.isPlaying) {
                     if (abActive && c.currentPosition >= _abB.value) c.seekTo(_abA.value)
                     _ui.update { it.copy(positionMs = c.currentPosition) }
+                    // A skipped song is not a play: count it after 30 s, or half of a very short track.
+                    val id = c.currentMediaItem?.mediaId?.toLongOrNull()
+                    if (id != null && id != countedPlayId) {
+                        val duration = c.duration
+                        val needed = if (duration > 0L) minOf(30_000L, duration / 2) else 30_000L
+                        if (c.currentPosition >= needed) {
+                            countedPlayId = id
+                            stats.recordPlay(id)
+                        }
+                    }
                 }
             }
         }
@@ -593,40 +604,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun restoreSleepVolume() {
-        val original = sleepBaseVolume ?: return
-        runCatching { controller?.volume = original }
-        sleepBaseVolume = null
-    }
-
-    fun setSleepTimer(minutes: Int) {
-        sleepJob?.cancel()
-        restoreSleepVolume()
-        _sleepLeft.value = 0L
-        val durationMs = PlaybackOptions.sleepDurationMs(minutes)
-        if (durationMs <= 0L) return
-
-        // Preserve the user's current volume and fade relative to it.
-        val baseVolume = controller?.volume ?: 1f
-        sleepBaseVolume = baseVolume
-        sleepJob = viewModelScope.launch {
-            // elapsedRealtime is monotonic, so timer accuracy is not affected by
-            // wall-clock changes or delays while the coroutine is suspended.
-            val deadline = SystemClock.elapsedRealtime() + durationMs
-            while (true) {
-                val left = PlaybackOptions.remainingMs(deadline, SystemClock.elapsedRealtime())
-                _sleepLeft.value = left
-                if (left <= 0L) break
-                if (left <= PlaybackOptions.SLEEP_FADE_DURATION_MS) {
-                    runCatching { controller?.volume = PlaybackOptions.sleepVolume(baseVolume, left) }
-                }
-                delay(minOf(1_000L, left))
-            }
-            _sleepLeft.value = 0L
-            controller?.pause()
-            restoreSleepVolume()
-        }
-    }
+    fun setSleepTimer(minutes: Int) = SleepTimer.start(minutes)
 
     fun setDynamicColors(enabled: Boolean) {
         prefs.edit().putBoolean("dynamic_colors", enabled).apply()
@@ -639,10 +617,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelCleared = true
         auth.removeAuthStateListener(authListener)
         autoSyncJob?.cancel()
-        sleepJob?.cancel()
-        sleepJob = null
-        _sleepLeft.value = 0L
-        restoreSleepVolume()
         pendingPlayback.clear()
         controller?.removeListener(listener)
         controller?.release()

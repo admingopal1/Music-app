@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,7 +44,13 @@ fun FirebaseAuthGate(content: @Composable () -> Unit) {
         onDispose { auth.removeAuthStateListener(listener) }
     }
 
-    if (signedIn) content() else AuthScreen(auth)
+    if (signedIn) {
+        content()
+    } else {
+        // The sign-in screen has a dark background but sits outside MusicTheme, so it fell back to the
+        // light default scheme and typed text came out dark on dark. Give it a dark scheme.
+        MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFFCA9AFF))) { AuthScreen(auth) }
+    }
 }
 
 @Composable

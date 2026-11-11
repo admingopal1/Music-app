@@ -211,15 +211,6 @@ fun HomeScreen(
                     )
                 }
             }
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("AI-ready listening", color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                }
-                Text(
-                    "Smart Mix uses on-device favourites and play history today. Cloud AI DJ, natural-language music search and mood-based generation can be added as a connected AI layer without changing your music library.",
-                    color = Color.White.copy(0.68f), style = MaterialTheme.typography.bodySmall,
-                )
-            }
         }
     }
 }
