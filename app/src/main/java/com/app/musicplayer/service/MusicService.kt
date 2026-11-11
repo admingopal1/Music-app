@@ -37,23 +37,10 @@ class MusicService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        // ReplayGain: a small audio processor in front of the AudioTrack scales the PCM.
-        val rgProcessor = ReplayGainProcessor()
-        val enhancerProcessor = EnhancerProcessor()
-        val audioLevelProcessor = AudioLevelProcessor()
-        val renderers = object : DefaultRenderersFactory(this) {
-            override fun buildAudioSink(
-                context: Context,
-                enableFloatOutput: Boolean,
-                enableAudioTrackPlaybackParams: Boolean,
-            ): AudioSink = DefaultAudioSink.Builder(context)
-                .setEnableFloatOutput(enableFloatOutput)
-                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                .setAudioProcessors(arrayOf<AudioProcessor>(rgProcessor, enhancerProcessor, audioLevelProcessor))
-                .build()
-        }
+        // Use Media3's stock audio sink while isolating the runtime playback failure.
+        // Custom PCM processors are temporarily bypassed; their implementations remain in the project.
 
-        val player = ExoPlayer.Builder(this, renderers)
+        val player = ExoPlayer.Builder(this)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)

@@ -165,10 +165,14 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         override fun onEvents(player: Player, events: Player.Events) = refreshUi()
 
         override fun onPlayerError(error: PlaybackException) {
+            val causes = generateSequence<Throwable>(error) { it.cause }
+                .take(4)
+                .map { cause -> "${cause.javaClass.simpleName}: ${cause.message ?: "no message"}" }
+                .joinToString(" <- ")
             _ui.update {
                 it.copy(
                     isPlaying = false,
-                    playbackError = "Playback error: ${error.errorCodeName} — ${error.message ?: "Unknown media error"}"
+                    playbackError = "Playback error: ${error.errorCodeName} — ${error.message ?: "Unknown media error"}\nCause: $causes"
                 )
             }
         }
