@@ -16,6 +16,7 @@ class WidgetBridge(private val ctx: Context, private val player: Player) : Playe
     private val io = Executors.newSingleThreadExecutor()
     private var artKey: String? = null
     private val released = AtomicBoolean(false)
+    private val publishLock = Any()
 
     init {
         player.addListener(this)
@@ -36,10 +37,13 @@ class WidgetBridge(private val ctx: Context, private val player: Player) : Playe
             if (released.get()) return@execute
             try {
                 val art = if (artChanged) loadArt(item) else null
-                // A release may happen while artwork is being decoded.
-                if (released.get()) return@execute
-                PlayerWidgets.save(ctx, title, artist, playing, art, replaceArt = artChanged)
-                PlayerWidgets.refreshAll(ctx)
+                // Serialize the final publish with release so an old bridge cannot
+                // publish after a replacement bridge has started updating the widget.
+                synchronized(publishLock) {
+                    if (released.get()) return@execute
+                    PlayerWidgets.save(ctx, title, artist, playing, art, replaceArt = artChanged)
+                    PlayerWidgets.refreshAll(ctx)
+                }
             } catch (e: Exception) {
                 // widgets are best effort
             }
@@ -69,7 +73,9 @@ class WidgetBridge(private val ctx: Context, private val player: Player) : Playe
     }
 
     fun release(clearPlaybackState: Boolean = true) {
-        if (!released.compareAndSet(false, true)) return
+        synchronized(publishLock) {
+            if (!released.compareAndSet(false, true)) return
+        }
         player.removeListener(this)
         if (clearPlaybackState) {
             io.execute {
