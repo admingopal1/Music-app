@@ -77,7 +77,8 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
         }
     }
 
-    val pos = ui.positionMs + offsetMs
+    // Positive manual offset delays the displayed lyrics relative to playback.
+    val pos = (ui.positionMs - offsetMs).coerceAtLeast(0L)
     val current = remember(lyrics, pos) {
         val l = lyrics
         if (l != null && l.synced) l.lines.indexOfLast { it.timeMs <= pos } else -1
@@ -158,7 +159,7 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                                 Text(
                                     line.text.ifBlank { "♪" },
                                     modifier = Modifier.fillMaxWidth().clickable(enabled = l.synced) {
-                                        vm.seekTo((line.timeMs - offsetMs).coerceAtLeast(0L))
+                                        vm.seekTo((line.timeMs + offsetMs).coerceAtLeast(0L))
                                     },
                                     textAlign = if (l.synced) TextAlign.Center else TextAlign.Start,
                                     fontSize = if (isCurrent) 24.sp else 19.sp,
