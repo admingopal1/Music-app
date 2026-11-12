@@ -28,6 +28,12 @@ object VideoRepository {
             MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
 
+        // DATA is deprecated and may be unavailable for scoped-storage media on Android 10+.
+        // RELATIVE_PATH is the supported folder hint on modern Android versions.
+        val folderColumn = if (Build.VERSION.SDK_INT >= 29)
+            MediaStore.Video.Media.RELATIVE_PATH
+        else
+            MediaStore.Video.Media.DATA
         val projection = arrayOf(
             MediaStore.Video.Media._ID,
             MediaStore.Video.Media.DISPLAY_NAME,
@@ -35,7 +41,7 @@ object VideoRepository {
             MediaStore.Video.Media.SIZE,
             MediaStore.Video.Media.WIDTH,
             MediaStore.Video.Media.HEIGHT,
-            MediaStore.Video.Media.DATA,
+            folderColumn,
         )
         val order = "${MediaStore.Video.Media.DATE_ADDED} DESC"
 
@@ -48,7 +54,7 @@ object VideoRepository {
                 val iSize = c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
                 val iW = c.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
                 val iH = c.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
-                val iData = c.getColumnIndex(MediaStore.Video.Media.DATA)
+                val iFolder = c.getColumnIndex(folderColumn)
                 while (c.moveToNext()) {
                     val id = c.getLong(iId)
                     out += Video(
@@ -58,8 +64,12 @@ object VideoRepository {
                         sizeBytes = c.getLong(iSize),
                         width = c.getInt(iW),
                         height = c.getInt(iH),
-                        folder = if (iData >= 0) c.getString(iData)?.substringBeforeLast('/', "").orEmpty() else "",
-                        uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id),
+                        folder = if (iFolder >= 0) {
+                            val path = c.getString(iFolder).orEmpty().trimEnd('/')
+                            if (Build.VERSION.SDK_INT >= 29) path.substringAfterLast('/', path)
+                            else path.substringBeforeLast('/', "")
+                        } else "",
+                        uri = ContentUris.withAppendedId(collection, id),
                     )
                 }
             }
