@@ -104,9 +104,9 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
 
     private fun status(session: IHTTPSession): Response {
         val t = transfer(session, "") ?: return text(Status.BAD_REQUEST, "Bad request")
-        if (t.sid != null && !mgr.hasSession(t.sid)) return text(Status.UNAUTHORIZED, "Unknown session")
+        if (t.sid.isNullOrBlank() || !mgr.hasSession(t.sid)) return text(Status.UNAUTHORIZED, "Unknown or missing secure session")
         val print = session.parms["qp"]?.filter { it.isLetterOrDigit() }
-        return json(JSONObject().put("have", mgr.status(t.key, t.name, t.size, print)).toString())
+        return json(JSONObject().put("have", mgr.status(t.key, t.name, t.size, print, t.sid)).toString())
     }
 
     private fun upload2(session: IHTTPSession, ip: String): Response {
@@ -125,6 +125,9 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
 
     private fun finish(session: IHTTPSession, ip: String): Response {
         val t = transfer(session, ip) ?: return text(Status.BAD_REQUEST, "Bad request")
+        if (t.sid.isNullOrBlank() || !mgr.hasSession(t.sid)) {
+            return text(Status.UNAUTHORIZED, "Unknown or missing secure session")
+        }
         val sha = session.parms["sha"].orEmpty()
         return when (mgr.finish(t.key, t.name, t.size, sha, t.from)) {
             0 -> json("{\"ok\":true}")

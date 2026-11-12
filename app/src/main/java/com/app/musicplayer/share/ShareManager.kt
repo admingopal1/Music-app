@@ -248,6 +248,9 @@ class ShareManager private constructor(context: Context) {
     private val sessions = ConcurrentHashMap<String, ByteArray>()
     private val keyItems = ConcurrentHashMap<String, Long>()
     private val partialDir by lazy { File(app.cacheDir, "incoming").apply { mkdirs() } }
+    // Fixed stripes serialize resume/write/finish operations without an unbounded per-transfer lock map.
+    private val transferLocks = Array(64) { Any() }
+    private fun transferLock(key: String): Any = transferLocks[(key.hashCode() and Int.MAX_VALUE) % transferLocks.size]
 
     private fun partial(key: String) = File(partialDir, key.filter { it.isLetterOrDigit() }.take(64).ifEmpty { "x" })
 
@@ -263,10 +266,11 @@ class ShareManager private constructor(context: Context) {
     fun hasSession(sid: String) = sessions.containsKey(sid)
 
     /** Bytes already received for [key] (to resume), or -1 when this phone already has the file. */
-    fun status(key: String, name: String, size: Long, print: String?): Long {
-        if (!print.isNullOrBlank() && alreadyHave(name, size, print)) return -1L
+    fun status(key: String, name: String, size: Long, print: String?, sid: String?): Long = synchronized(transferLock(key)) {
+        if (sid.isNullOrBlank() || !sessions.containsKey(sid)) return@synchronized -1L
+        if (!print.isNullOrBlank() && alreadyHave(name, size, print)) return@synchronized -1L
         val f = partial(key)
-        return if (f.exists()) f.length().coerceAtMost(size) else 0L
+        if (f.exists()) f.length().coerceAtMost(size) else 0L
     }
 
     /** Same name, size *and* content fingerprint, so a different track that happens to match by name/size is still sent. */
@@ -308,9 +312,15 @@ class ShareManager private constructor(context: Context) {
      * Appends one (encrypted) upload body to the partial file for [key], starting at plaintext [offset].
      * Returns the number of bytes now stored, or -1 for an unknown session.
      */
-    fun receivePart(key: String, name: String, size: Long, offset: Long, sid: String?, input: InputStream, from: String): Long {
-        val aes = sid?.let { sessions[it] ?: return -1L }
-        val id = itemForKey(key, name, size, from, aes != null)
+    fun receivePart(key: String, name: String, size: Long, offset: Long, sid: String?, input: InputStream, from: String): Long =
+        synchronized(transferLock(key)) {
+            receivePartLocked(key, name, size, offset, sid, input, from)
+        }
+
+    private fun receivePartLocked(key: String, name: String, size: Long, offset: Long, sid: String?, input: InputStream, from: String): Long {
+        if (size <= 0L || offset !in 0L..size || sid.isNullOrBlank()) return -1L
+        val aes = sessions[sid] ?: return -1L
+        val id = itemForKey(key, name, size, from, secure = true)
         ShareService.start(app)
         val f = partial(key)
         RandomAccessFile(f, "rw").use { it.setLength(offset.coerceAtMost(it.length())) }
@@ -325,6 +335,9 @@ class ShareManager private constructor(context: Context) {
                     while (done < size) {
                         if (id in cancelled) throw IOException("cancelled")
                         val plain = SecureChannel.readFrame(aes, din) ?: break
+                        if (plain.isEmpty() || plain.size.toLong() > size - done) {
+                            throw IOException("Encrypted chunk exceeds declared file size")
+                        }
                         out.write(plain)
                         done += plain.size
                         tracker.add(done)
@@ -358,7 +371,13 @@ class ShareManager private constructor(context: Context) {
     }
 
     /** Verifies the SHA-256 of a fully received file and saves it. 0 = saved, 1 = checksum mismatch, 2 = incomplete. */
-    fun finish(key: String, name: String, size: Long, sha: String, from: String): Int {
+    fun finish(key: String, name: String, size: Long, sha: String, from: String): Int =
+        synchronized(transferLock(key)) {
+            finishLocked(key, name, size, sha, from)
+        }
+
+    private fun finishLocked(key: String, name: String, size: Long, sha: String, from: String): Int {
+        if (size <= 0L || sha.length != 64 || !sha.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) return 2
         val f = partial(key)
         val id = itemForKey(key, name, size, from, false)
         try {
