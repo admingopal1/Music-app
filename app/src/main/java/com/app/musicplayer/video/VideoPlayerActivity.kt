@@ -199,14 +199,29 @@ class VideoPlayerActivity : ComponentActivity() {
     }
 
     private fun readQueue(): Queue {
-        val uris = intent.getStringArrayListExtra(EXTRA_URIS)
-        if (!uris.isNullOrEmpty()) {
-            val titles = intent.getStringArrayListExtra(EXTRA_TITLES) ?: arrayListOf()
-            return Queue(uris, titles, intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, uris.lastIndex))
+        val suppliedUris = intent.getStringArrayListExtra(EXTRA_URIS)
+        if (!suppliedUris.isNullOrEmpty()) {
+            if (suppliedUris.size > MAX_QUEUE || suppliedUris.any { !isAllowedVideoUri(it) }) {
+                return Queue(emptyList(), emptyList(), 0)
+            }
+            val titles = intent.getStringArrayListExtra(EXTRA_TITLES).orEmpty().take(MAX_QUEUE)
+            return Queue(
+                suppliedUris,
+                titles,
+                intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, suppliedUris.lastIndex),
+            )
         }
         val data = intent.data ?: return Queue(emptyList(), emptyList(), 0)
+        if (!isAllowedVideoUri(data.toString())) return Queue(emptyList(), emptyList(), 0)
         val name = data.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.') ?: "Video"
         return Queue(listOf(data.toString()), listOf(name), 0)
+    }
+
+    private fun isAllowedVideoUri(raw: String): Boolean {
+        if (raw.isBlank() || raw.length > MAX_URI_LENGTH) return false
+        val uri = runCatching { Uri.parse(raw) }.getOrNull() ?: return false
+        return uri.scheme?.lowercase() in ALLOWED_VIDEO_SCHEMES &&
+            (uri.authority?.length ?: 0) <= MAX_AUTHORITY_LENGTH
     }
 
     private fun saveResume() {
@@ -288,15 +303,26 @@ class VideoPlayerActivity : ComponentActivity() {
         private const val EXTRA_TITLES = "titles"
         private const val EXTRA_INDEX = "index"
         private const val MAX_QUEUE = 200   // keeps the Intent small
+        private const val MAX_URI_LENGTH = 4_096
+        private const val MAX_AUTHORITY_LENGTH = 512
+        private val ALLOWED_VIDEO_SCHEMES = setOf("content", "file", "http", "https")
 
         fun start(ctx: Context, uris: List<String>, titles: List<String>, index: Int) {
-            val from = (index - MAX_QUEUE / 2).coerceAtLeast(0)
+            if (uris.isEmpty() || uris.size > 10_000 || uris.any { it.isBlank() || it.length > MAX_URI_LENGTH }) {
+                return
+            }
+            val safeIndex = index.coerceIn(0, uris.lastIndex)
+            val from = (safeIndex - MAX_QUEUE / 2).coerceAtLeast(0)
             val to = (from + MAX_QUEUE).coerceAtMost(uris.size)
+            val windowUris = uris.subList(from, to)
+            val windowTitles = windowUris.indices.map { offset ->
+                titles.getOrNull(from + offset)?.take(256).orEmpty()
+            }
             ctx.startActivity(
                 Intent(ctx, VideoPlayerActivity::class.java)
-                    .putStringArrayListExtra(EXTRA_URIS, ArrayList(uris.subList(from, to)))
-                    .putStringArrayListExtra(EXTRA_TITLES, ArrayList(titles.subList(from, to)))
-                    .putExtra(EXTRA_INDEX, index - from)
+                    .putStringArrayListExtra(EXTRA_URIS, ArrayList(windowUris))
+                    .putStringArrayListExtra(EXTRA_TITLES, ArrayList(windowTitles))
+                    .putExtra(EXTRA_INDEX, safeIndex - from)
             )
         }
     }
