@@ -10,17 +10,22 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
+import com.google.common.util.concurrent.Futures
 import androidx.media3.session.MediaSessionService
 import com.app.musicplayer.MainActivity
 import com.app.musicplayer.CrashLog
 import com.app.musicplayer.audio.SonyAudioEffects
 import com.app.musicplayer.playback.SleepTimer
+import com.app.musicplayer.playback.PlaybackResumeStore
 import com.app.musicplayer.audio.AudioLevelProcessor
 import com.app.musicplayer.audio.AudioLevelMonitor
 import com.app.musicplayer.audio.DspGuard
@@ -42,10 +47,25 @@ class MusicService : MediaSessionService() {
     private var fadeController: FadeController? = null
     private var enhancerController: EnhancerController? = null
     private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private lateinit var playbackResumeStore: PlaybackResumeStore
+
+    private val savePlaybackRunnable = object : Runnable {
+        override fun run() {
+            if (::playbackResumeStore.isInitialized) {
+                player?.let(playbackResumeStore::save)
+                mainHandler.postDelayed(this, PLAYBACK_SAVE_INTERVAL_MS)
+            }
+        }
+    }
+
+    companion object {
+        private const val PLAYBACK_SAVE_INTERVAL_MS = 10_000L
+    }
 
     override fun onCreate() {
         super.onCreate()
 
+        playbackResumeStore = PlaybackResumeStore(this)
         val prefs = getSharedPreferences("settings", MODE_PRIVATE)
         // "Skip silence" is toggled from Settings via the shared preferences file.
         val l = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
@@ -63,7 +83,42 @@ class MusicService : MediaSessionService() {
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        mediaSession = MediaSession.Builder(this, first).setSessionActivity(openApp).build()
+        mediaSession = MediaSession.Builder(this, first)
+            .setSessionActivity(openApp)
+            .setCallback(object : MediaSession.Callback {
+                @OptIn(UnstableApi::class)
+                override fun onPlaybackResumption(
+                    mediaSession: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    isForPlayback: Boolean,
+                ): com.google.common.util.concurrent.ListenableFuture<MediaItemsWithStartPosition> {
+                    val snapshot = playbackResumeStore.restore()
+                        ?: return Futures.immediateFailedFuture(
+                            IllegalStateException("No saved playback queue is available.")
+                        )
+
+                    if (isForPlayback) {
+                        mediaSession.player.repeatMode = snapshot.repeatMode
+                        mediaSession.player.shuffleModeEnabled = snapshot.shuffleEnabled
+                        mediaSession.player.playbackParameters =
+                            PlaybackParameters(snapshot.speed, snapshot.pitch)
+                    }
+
+                    val items = if (isForPlayback) {
+                        snapshot.items
+                    } else {
+                        listOf(snapshot.items[snapshot.startIndex])
+                    }
+                    val startIndex = if (isForPlayback) snapshot.startIndex else 0
+                    val startPosition = if (isForPlayback) snapshot.positionMs else C.TIME_UNSET
+
+                    return Futures.immediateFuture(
+                        MediaItemsWithStartPosition(items, startIndex, startPosition)
+                    )
+                }
+            })
+            .build()
+        mainHandler.postDelayed(savePlaybackRunnable, PLAYBACK_SAVE_INTERVAL_MS)
     }
 
     /** Builds a fully wired player: sink, effects, listeners, widgets and the DSP controllers. */
@@ -106,6 +161,11 @@ class MusicService : MediaSessionService() {
         player = p
         SleepTimer.attach(p)
         p.skipSilenceEnabled = prefs.getBoolean("skip_silence", false)
+        p.addListener(object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                playbackResumeStore.save(player)
+            }
+        })
 
         // Hook hardware effects (EQ, bass...) to the player's audio session, and re-hook if it changes.
         val fx = SonyAudioEffects.get(this)
@@ -151,14 +211,14 @@ class MusicService : MediaSessionService() {
         return p
     }
 
-    private fun releaseControllers() {
+    private fun releaseControllers(clearWidgetState: Boolean = true) {
         enhancerController?.release()
         enhancerController = null
         fadeController?.release()
         fadeController = null
         rgController?.release()
         rgController = null
-        widgetBridge?.release()
+        widgetBridge?.release(clearPlaybackState = clearWidgetState)
         widgetBridge = null
     }
 
@@ -175,7 +235,8 @@ class MusicService : MediaSessionService() {
         val shuffle = old.shuffleModeEnabled
         val params = old.playbackParameters
 
-        releaseControllers()
+        playbackResumeStore.save(old)
+        releaseControllers(clearWidgetState = false)
         val fresh = buildPlayer(useDsp = false)
         fresh.repeatMode = repeatMode
         fresh.shuffleModeEnabled = shuffle
@@ -192,11 +253,13 @@ class MusicService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        player?.let(playbackResumeStore::save)
         val p = mediaSession?.player
         if (p == null || !p.playWhenReady || p.mediaItemCount == 0) stopSelf()
     }
 
     override fun onDestroy() {
+        if (::playbackResumeStore.isInitialized) player?.let(playbackResumeStore::save)
         mainHandler.removeCallbacksAndMessages(null)
         SleepTimer.detach()
         releaseControllers()
