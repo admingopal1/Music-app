@@ -42,6 +42,7 @@ class MusicService : MediaSessionService() {
     private var fadeController: FadeController? = null
     private var enhancerController: EnhancerController? = null
     private var prefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private val playerListeners = ArrayList<Player.Listener>()
 
     override fun onCreate() {
         super.onCreate()
@@ -109,14 +110,16 @@ class MusicService : MediaSessionService() {
 
         // Hook hardware effects (EQ, bass...) to the player's audio session, and re-hook if it changes.
         val fx = SonyAudioEffects.get(this)
-        p.addListener(object : Player.Listener {
+        val sessionListener = object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 fx.attach(audioSessionId)
             }
-        })
+        }
+        p.addListener(sessionListener)
+        playerListeners.add(sessionListener)
         fx.attach(p.audioSessionId)
 
-        p.addListener(object : Player.Listener {
+        val errorListener = object : Player.Listener {
             private var errorStreak = 0
 
             override fun onPlayerError(error: PlaybackException) {
@@ -142,7 +145,9 @@ class MusicService : MediaSessionService() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) errorStreak = 0
             }
-        })
+        }
+        p.addListener(errorListener)
+        playerListeners.add(errorListener)
 
         widgetBridge = WidgetBridge(this, p)
         rgController = ReplayGainController(this, p, rgProcessor)
@@ -176,6 +181,9 @@ class MusicService : MediaSessionService() {
         val params = old.playbackParameters
 
         releaseControllers()
+        playerListeners.forEach { old.removeListener(it) }
+        playerListeners.clear()
+        SleepTimer.detach()
         val fresh = buildPlayer(useDsp = false)
         fresh.repeatMode = repeatMode
         fresh.shuffleModeEnabled = shuffle

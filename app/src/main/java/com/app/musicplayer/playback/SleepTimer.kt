@@ -1,6 +1,8 @@
 package com.app.musicplayer.playback
 
 import android.os.SystemClock
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.Player
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,23 +27,29 @@ object SleepTimer {
     private var job: Job? = null
     private var baseVolume: Float? = null
     private var player: Player? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private fun onMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
+    }
 
     /** Called by MusicService once the player exists. */
-    fun attach(p: Player) {
+    fun attach(p: Player) = onMain {
+        if (player !== p) cancelLocked()
         player = p
     }
 
     /** Called by MusicService when it is destroyed. */
-    fun detach() {
-        cancel()
+    fun detach() = onMain {
+        cancelLocked()
         player = null
     }
 
-    fun start(minutes: Int) {
-        cancel()
-        val p = player ?: return
+    fun start(minutes: Int) = onMain {
+        cancelLocked()
+        val p = player ?: return@onMain
         val durationMs = PlaybackOptions.sleepDurationMs(minutes)
-        if (durationMs <= 0L) return
+        if (durationMs <= 0L) return@onMain
 
         // Fade relative to whatever volume the user currently has, and restore it afterwards.
         val base = p.volume
@@ -60,18 +68,20 @@ object SleepTimer {
             }
             _leftMs.value = 0L
             runCatching { p.pause() }
-            restoreVolume()
+            restoreVolumeLocked()
         }
     }
 
-    fun cancel() {
+    fun cancel() = onMain { cancelLocked() }
+
+    private fun cancelLocked() {
         job?.cancel()
         job = null
         _leftMs.value = 0L
-        restoreVolume()
+        restoreVolumeLocked()
     }
 
-    private fun restoreVolume() {
+    private fun restoreVolumeLocked() {
         val original = baseVolume ?: return
         runCatching { player?.volume = original }
         baseVolume = null

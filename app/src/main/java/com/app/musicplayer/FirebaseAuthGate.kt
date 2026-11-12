@@ -85,7 +85,7 @@ private fun AuthScreen(auth: FirebaseAuth) {
         Spacer(Modifier.height(24.dp))
         OutlinedTextField(
             value = email,
-            onValueChange = { email = it.trim(); message = null },
+            onValueChange = { email = it; message = null },
             modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(18.dp)),
             label = { Text("Email") },
             singleLine = true,
@@ -106,16 +106,17 @@ private fun AuthScreen(auth: FirebaseAuth) {
         Spacer(Modifier.height(16.dp))
         Button(
             onClick = {
-                if (email.isBlank() || !email.contains("@") || password.length < 6) {
+                val cleanEmail = email.trim()
+                if (cleanEmail.isBlank() || !cleanEmail.contains("@") || password.length < 6) {
                     message = "Enter a valid email and a password with at least 6 characters."
                     return@Button
                 }
                 busy = true
                 message = null
                 val task = if (isRegister) {
-                    auth.createUserWithEmailAndPassword(email, password)
+                    auth.createUserWithEmailAndPassword(cleanEmail, password)
                 } else {
-                    auth.signInWithEmailAndPassword(email, password)
+                    auth.signInWithEmailAndPassword(cleanEmail, password)
                 }
                 task.addOnCompleteListener { result ->
                     busy = false
@@ -123,7 +124,7 @@ private fun AuthScreen(auth: FirebaseAuth) {
                         val user = auth.currentUser
                         if (user != null) {
                             val profile = hashMapOf<String, Any>(
-                                "email" to (user.email ?: email),
+                                "email" to (user.email ?: cleanEmail),
                                 "updatedAt" to FieldValue.serverTimestamp(),
                             )
                             FirebaseFirestore.getInstance()
@@ -147,11 +148,11 @@ private fun AuthScreen(auth: FirebaseAuth) {
         if (!isRegister) {
             TextButton(
                 onClick = {
-                    if (email.isBlank() || !email.contains("@")) {
+                    if (email.trim().isBlank() || !email.trim().contains("@")) {
                         message = "Enter your email first to reset your password."
                     } else {
                         busy = true
-                        auth.sendPasswordResetEmail(email).addOnCompleteListener { result ->
+                        auth.sendPasswordResetEmail(email.trim()).addOnCompleteListener { result ->
                             busy = false
                             message = if (result.isSuccessful) "Password reset email sent."
                             else result.exception?.localizedMessage ?: "Could not send reset email."

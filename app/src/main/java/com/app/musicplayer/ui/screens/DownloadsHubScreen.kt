@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
+import java.io.File
 import com.app.musicplayer.download.DirectMediaUrlResult
 import com.app.musicplayer.download.DirectMediaUrlValidator
 import androidx.compose.foundation.background
@@ -349,6 +350,10 @@ fun DownloadsHubScreen() {
 }
 
 /** Avoid duplicate active URLs and filename collisions in the shared Downloads/MusicPlayer folder. */
+private fun normalizeDownloadUri(raw: String?): String? = raw?.let {
+    runCatching { Uri.parse(it).normalizeScheme().buildUpon().fragment(null).build().toString() }.getOrNull()
+}
+
 private fun hasActiveDownload(context: Context, sourceUri: String): Boolean {
     val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
     val cursor = manager.query(DownloadManager.Query()) ?: return false
@@ -361,7 +366,7 @@ private fun hasActiveDownload(context: Context, sourceUri: String): Boolean {
             val status = c.getInt(statusCol)
             val active = status == DownloadManager.STATUS_PENDING ||
                 status == DownloadManager.STATUS_RUNNING || status == DownloadManager.STATUS_PAUSED
-            found = active && c.getString(uriCol) == sourceUri
+            found = active && normalizeDownloadUri(c.getString(uriCol)) == normalizeDownloadUri(sourceUri)
         }
         found
     }
@@ -369,20 +374,30 @@ private fun hasActiveDownload(context: Context, sourceUri: String): Boolean {
 
 private fun uniqueDownloadFileName(context: Context, requestedName: String): String {
     val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    val cursor = manager.query(DownloadManager.Query()) ?: return requestedName
-    val alreadyUsed = cursor.use { c ->
+    val cursor = manager.query(DownloadManager.Query())
+    val usedNames = cursor?.use { c ->
         val titleCol = c.getColumnIndex(DownloadManager.COLUMN_TITLE)
-        if (titleCol < 0) false else {
-            var found = false
-            while (c.moveToNext() && !found) found = c.getString(titleCol).equals(requestedName, ignoreCase = true)
-            found
+        buildSet {
+            if (titleCol >= 0) while (c.moveToNext()) add(c.getString(titleCol).orEmpty().lowercase())
         }
+    } ?: emptySet()
+    val downloadDir = File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+        "MusicPlayer",
+    )
+    if (requestedName.lowercase() !in usedNames && !File(downloadDir, requestedName).exists()) {
+        return requestedName
     }
-    if (!alreadyUsed) return requestedName
     val dot = requestedName.lastIndexOf('.')
     val base = if (dot > 0) requestedName.substring(0, dot) else requestedName
     val extension = if (dot > 0) requestedName.substring(dot) else ""
-    return "${base.take(70)}-${System.currentTimeMillis()}$extension"
+    var suffix = 1
+    var candidate: String
+    do {
+        candidate = "${base.take(70)}-$suffix$extension"
+        suffix++
+    } while (candidate.lowercase() in usedNames || File(downloadDir, candidate).exists())
+    return candidate
 }
 
 private fun uniqueRetryFileName(title: String): String {

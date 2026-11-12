@@ -181,6 +181,13 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             // Counted later by the position loop, once the song has really been listened to.
             countedPlayId = null
+            if (_ui.value.playbackError != null) _ui.update { it.copy(playbackError = null) }
+        }
+
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_READY && _ui.value.playbackError != null) {
+                _ui.update { it.copy(playbackError = null) }
+            }
         }
     }
 
@@ -200,17 +207,20 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 val abActive = _abA.value >= 0 && _abB.value > _abA.value
                 delay(if (abActive) 80 else 250)
                 val c = controller
-                if (c != null && c.isPlaying) {
-                    if (abActive && c.currentPosition >= _abB.value) c.seekTo(_abA.value)
-                    _ui.update { it.copy(positionMs = c.currentPosition) }
-                    // A skipped song is not a play: count it after 30 s, or half of a very short track.
-                    val id = c.currentMediaItem?.mediaId?.toLongOrNull()
-                    if (id != null && id != countedPlayId) {
-                        val duration = c.duration
-                        val needed = if (duration > 0L) minOf(30_000L, duration / 2) else 30_000L
-                        if (c.currentPosition >= needed) {
-                            countedPlayId = id
-                            stats.recordPlay(id)
+                if (c != null) {
+                    val pos = c.currentPosition.coerceAtLeast(0)
+                    _ui.update { if (it.positionMs != pos) it.copy(positionMs = pos) else it }
+                    if (c.isPlaying) {
+                        if (abActive && pos >= _abB.value) c.seekTo(_abA.value)
+                        // A skipped song is not a play: count it after 30 s, or half of a very short track.
+                        val id = c.currentMediaItem?.mediaId?.toLongOrNull()
+                        if (id != null && id != countedPlayId) {
+                            val duration = c.duration
+                            val needed = if (duration > 0L) minOf(30_000L, duration / 2) else 30_000L
+                            if (pos >= needed) {
+                                countedPlayId = id
+                                stats.recordPlay(id)
+                            }
                         }
                     }
                 }

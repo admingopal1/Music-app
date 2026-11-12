@@ -28,6 +28,15 @@ val DefaultAccent = ACCENT_CHOICES[4]
 private val TextHigh = Color(0xFFEDEAF6)
 private val TextMid = Color(0xFFB9B4C8)
 
+private val AppTypography = Typography().let { base ->
+    Typography(
+        headlineLarge = base.headlineLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+        headlineMedium = base.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+        titleLarge = base.titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+        titleMedium = base.titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+    )
+}
+
 /** Dark theme. [accent] comes from Settings or the album art (Palette) and cross-fades smoothly. */
 @Composable
 fun MusicTheme(accent: Color = DefaultAccent, amoled: Boolean = true, content: @Composable () -> Unit) {
@@ -51,12 +60,7 @@ fun MusicTheme(accent: Color = DefaultAccent, amoled: Boolean = true, content: @
     )
     MaterialTheme(
         colorScheme = scheme,
-        typography = Typography(
-            headlineLarge = Typography().headlineLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-            headlineMedium = Typography().headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
-            titleLarge = Typography().titleLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-            titleMedium = Typography().titleMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
-        ),
+        typography = AppTypography,
         shapes = Shapes(
             small = RoundedCornerShape(12.dp),
             medium = RoundedCornerShape(20.dp),

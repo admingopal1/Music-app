@@ -28,8 +28,8 @@ class StatsStore(ctx: Context) {
             if (p.size < 4) continue
             out[id] = SongStats(
                 favorite = p[0] == "1",
-                rating = p[1].toIntOrNull() ?: 0,
-                plays = p[2].toIntOrNull() ?: 0,
+                rating = (p[1].toIntOrNull() ?: 0).coerceIn(0, 5),
+                plays = (p[2].toIntOrNull() ?: 0).coerceAtLeast(0),
                 lastPlayed = p[3].toLongOrNull() ?: 0L,
                 updatedAt = p.getOrNull(4)?.toLongOrNull() ?: 0L,
             )

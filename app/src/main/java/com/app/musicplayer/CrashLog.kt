@@ -49,7 +49,7 @@ class MusicApp : Application() {
 object CrashLog {
     private const val FILE_NAME = "last_crash.txt"
     private var appContext: Context? = null
-    @Volatile private var recordedThisSession = false
+    @Volatile private var lastRecordAt = 0L
 
     fun install(app: Application) {
         appContext = app.applicationContext
@@ -70,8 +70,9 @@ object CrashLog {
 
     fun record(label: String, error: Throwable) {
         val ctx = appContext ?: return
-        if (recordedThisSession) return
-        recordedThisSession = true
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastRecordAt < 5_000L) return
+        lastRecordAt = now
         try {
             val trace = StringWriter().also { error.printStackTrace(PrintWriter(it)) }.toString()
             val header = "Non-fatal error: $label\nTime: ${Date()}\nDevice: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})\n\n"
@@ -102,7 +103,11 @@ fun CrashReportScreen(report: String, onContinue: () -> Unit) {
     Column(
         Modifier.fillMaxSize().background(Color(0xFF121212)).statusBarsPadding().padding(16.dp),
     ) {
-        Text("The app crashed last time", color = Color.White, style = MaterialTheme.typography.titleLarge)
+        Text(
+            if (report.startsWith("Non-fatal error:")) "The app hit an error last time" else "The app crashed last time",
+            color = Color.White,
+            style = MaterialTheme.typography.titleLarge,
+        )
         Spacer(Modifier.height(4.dp))
         Text(
             "Copy or share this error and send it to the developer so it can be fixed.",

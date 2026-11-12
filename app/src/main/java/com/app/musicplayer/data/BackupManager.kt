@@ -106,16 +106,19 @@ class BackupManager(private val ctx: Context) {
         // playlists: merge, keep existing order and add new songs at the end
         val current = playlistStore.lists.value
         val merged = LinkedHashMap<String, List<Long>>(current)
+        val changed = HashSet<String>()
         val pl = root.optJSONObject("playlists") ?: JSONObject()
         var plCount = 0
         for (name in pl.keys()) {
             val arr = pl.getJSONArray(name)
             val ids = (0 until arr.length()).mapNotNull { map[arr.getLong(it)]?.id }
             val existing = merged[name].orEmpty()
-            merged[name] = existing + ids.filter { it !in existing }
+            val combined = existing + ids.filter { it !in existing }
+            if (combined != existing || name !in current) changed.add(name)
+            merged[name] = combined
             plCount++
         }
-        playlistStore.replaceAll(merged)
+        playlistStore.mergeRestore(merged, changed)
 
         // stats: favourite OR, rating from backup if set, bigger play count / latest play
         val st = root.optJSONObject("stats") ?: JSONObject()
@@ -191,7 +194,7 @@ class BackupManager(private val ctx: Context) {
         }
 
         val stats = root.optJSONObject("stats")
-            ?: throw IllegalArgumentException("Backup is missing song statistics.")
+            ?: if (version >= 2) throw IllegalArgumentException("Backup is missing song statistics.") else JSONObject()
         for (key in stats.keys()) {
             require(key.toLongOrNull() != null) { "Backup contains an invalid statistics ID." }
             val fields = stats.optString(key, "").split(',')
@@ -205,7 +208,7 @@ class BackupManager(private val ctx: Context) {
         }
 
         val lyrics = root.optJSONObject("lyrics")
-            ?: throw IllegalArgumentException("Backup is missing lyrics data.")
+            ?: if (version >= 2) throw IllegalArgumentException("Backup is missing lyrics data.") else JSONObject()
         for (key in lyrics.keys()) {
             require(key.toLongOrNull() != null && lyrics.opt(key) is String) {
                 "Backup contains invalid lyrics data."
@@ -213,7 +216,7 @@ class BackupManager(private val ctx: Context) {
         }
 
         val prefs = root.optJSONObject("prefs")
-            ?: throw IllegalArgumentException("Backup is missing settings.")
+            ?: if (version >= 2) throw IllegalArgumentException("Backup is missing settings.") else JSONObject()
         for (name in prefFiles) {
             val entries = prefs.optJSONObject(name) ?: continue
             for (key in entries.keys()) {

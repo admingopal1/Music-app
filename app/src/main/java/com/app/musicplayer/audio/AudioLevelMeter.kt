@@ -117,8 +117,8 @@ class AudioLevelProcessor : BaseAudioProcessor() {
         val maxBin = fftSize / 2
         for (band in 0 until bandCount) {
             val start = max(1, ((maxBin - 1).toDouble().pow(band.toDouble() / bandCount)).toInt())
-            val end = max(start + 1, ((maxBin - 1).toDouble().pow((band + 1.0) / bandCount)).toInt())
-                .coerceAtMost(maxBin)
+            val rawEnd = (maxBin - 1).toDouble().pow((band + 1.0) / bandCount).toInt()
+            val end = max(start + 1, rawEnd.coerceAtMost(maxBin))
             var energy = 0f
             for (bin in start until end) {
                 energy += real[bin] * real[bin] + imaginary[bin] * imaginary[bin]

@@ -29,10 +29,16 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
         val pin = session.parms["pin"].orEmpty()
         val ip = session.headers["http-client-ip"].orEmpty()
 
-        if (pin.isEmpty()) return html(pinPage(null))
+        if (pin.isEmpty()) {
+            if (uri == "/" && session.method == Method.GET) return html(pinPage(null))
+            return closeNow(text(Status.lookup(401) ?: Status.FORBIDDEN, "Missing PIN"))
+        }
         when (mgr.checkPin(pin, ip)) {
-            1 -> return if (uri == "/") html(pinPage("Wrong PIN")) else text(Status.FORBIDDEN, "Wrong PIN")
-            2 -> return text(Status.lookup(429) ?: Status.FORBIDDEN, "Too many attempts. Try again in a minute.")
+            1 -> {
+                if (uri == "/" && session.method == Method.GET) return html(pinPage("Wrong PIN"))
+                return closeNow(text(Status.lookup(401) ?: Status.FORBIDDEN, "Wrong PIN"))
+            }
+            2 -> return closeNow(text(Status.lookup(429) ?: Status.FORBIDDEN, "Too many attempts. Try again in a minute."))
         }
 
         return when {
@@ -47,14 +53,14 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
     // ------------------------------------------------------------------ upload
 
     private fun upload(session: IHTTPSession, ip: String): Response {
-        if (!mgr.acceptingUploads()) return text(Status.FORBIDDEN, "This device is not receiving right now.")
+        if (!mgr.acceptingUploads()) return closeNow(text(Status.FORBIDDEN, "This device is not receiving right now."))
         val raw = session.parms["name"]
             ?: session.headers["x-file-name"]?.let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrNull() }
             ?: "file"
         val name = sanitize(raw)
         val length = session.headers["content-length"]?.toLongOrNull() ?: -1L
         if (length > ShareManager.MAX_UPLOAD_BYTES) {
-            return text(Status.lookup(413) ?: Status.INTERNAL_ERROR, "File exceeds the 2 GiB upload limit.")
+            return closeNow(text(Status.lookup(413) ?: Status.INTERNAL_ERROR, "File exceeds the 2 GiB upload limit."))
         }
         val from = session.parms["from"]?.takeIf { it.isNotBlank() } ?: ip.ifBlank { "device" }
         val ok = mgr.receiveStream(name, length, session.inputStream, from)
@@ -100,6 +106,8 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
     }
 
     // ------------------------------------------------------------------ pages
+
+    private fun closeNow(r: Response): Response { r.closeConnection(true); return r }
 
     private fun text(status: Response.IStatus, msg: String): Response = newFixedLengthResponse(status, MIME_PLAINTEXT, msg)
     private fun html(body: String): Response = newFixedLengthResponse(Status.OK, "text/html; charset=utf-8", body)

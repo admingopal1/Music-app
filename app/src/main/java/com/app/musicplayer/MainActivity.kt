@@ -101,12 +101,24 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     val accent by vm.accent.collectAsStateWithLifecycle()
     val amoled by vm.amoled.collectAsStateWithLifecycle()
 
+    val context = androidx.compose.ui.platform.LocalContext.current
     val permissions = rememberPermissions()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         vm.loadLibrary()
         vm.loadVideos()
     }
-    LaunchedEffect(Unit) { launcher.launch(permissions) }
+    LaunchedEffect(Unit) {
+        val missing = permissions.filter {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            vm.loadLibrary()
+            vm.loadVideos()
+        } else {
+            launcher.launch(missing.toTypedArray())
+        }
+    }
 
     // Keep the four most-used destinations visible. Less-frequent tools live
     // in More, avoiding eight compressed and hard-to-hit bottom-nav targets.
