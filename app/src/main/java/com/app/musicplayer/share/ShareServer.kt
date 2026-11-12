@@ -125,6 +125,9 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
 
     private fun finish(session: IHTTPSession, ip: String): Response {
         val t = transfer(session, ip) ?: return text(Status.BAD_REQUEST, "Bad request")
+        if (t.sid.isNullOrBlank() || !mgr.hasSession(t.sid)) {
+            return text(Status.UNAUTHORIZED, "Unknown or missing secure session")
+        }
         val sha = session.parms["sha"].orEmpty()
         return when (mgr.finish(t.key, t.name, t.size, sha, t.from)) {
             0 -> json("{\"ok\":true}")
