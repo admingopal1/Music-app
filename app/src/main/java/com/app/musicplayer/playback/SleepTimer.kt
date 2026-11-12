@@ -35,8 +35,12 @@ object SleepTimer {
         val base = baseVolume ?: return
         val deadline = deadlineElapsed ?: return
         val left = PlaybackOptions.remainingMs(deadline, SystemClock.elapsedRealtime())
-        if (left <= PlaybackOptions.SLEEP_FADE_DURATION_MS) {
-            runCatching { p.volume = PlaybackOptions.sleepVolume(base, left) }
+        runCatching {
+            p.volume = if (left <= PlaybackOptions.SLEEP_FADE_DURATION_MS) {
+                PlaybackOptions.sleepVolume(base, left)
+            } else {
+                base
+            }
         }
     }
 
