@@ -11,6 +11,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.tanh
+import kotlin.math.roundToInt
 
 /** User-facing sound enhancer settings (stored in the "settings" preferences, keys enh_*). */
 data class EnhancerSettings(
@@ -143,8 +144,8 @@ override fun queueInput(inputBuffer: ByteBuffer) {
                 r = soft(r)
             }
             if (is16) {
-                out.putShort((l * 32768f).toInt().coerceIn(-32768, 32767).toShort())
-                out.putShort((r * 32768f).toInt().coerceIn(-32768, 32767).toShort())
+                out.putShort((l * 32768f).roundToInt().coerceIn(-32768, 32767).toShort())
+                out.putShort((r * 32768f).roundToInt().coerceIn(-32768, 32767).toShort())
             } else {
                 out.putFloat(l.coerceIn(-1f, 1f))
                 out.putFloat(r.coerceIn(-1f, 1f))

@@ -201,8 +201,9 @@ class VideoPlayerActivity : ComponentActivity() {
     private fun readQueue(): Queue {
         val uris = intent.getStringArrayListExtra(EXTRA_URIS)
         if (!uris.isNullOrEmpty()) {
-            val titles = intent.getStringArrayListExtra(EXTRA_TITLES) ?: arrayListOf()
-            return Queue(uris, titles, intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, uris.lastIndex))
+            val safeUris = uris.take(MAX_QUEUE)
+            val titles = (intent.getStringArrayListExtra(EXTRA_TITLES) ?: arrayListOf()).take(MAX_QUEUE)
+            return Queue(safeUris, titles, intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(0, safeUris.lastIndex))
         }
         val data = intent.data ?: return Queue(emptyList(), emptyList(), 0)
         val name = data.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.') ?: "Video"
@@ -255,10 +256,14 @@ class VideoPlayerActivity : ComponentActivity() {
             Toast.makeText(this, "No video is currently loaded.", Toast.LENGTH_SHORT).show()
             return
         }
+        val position = p.currentPosition
+        val wasPlaying = p.playWhenReady
         p.replaceMediaItem(
             p.currentMediaItemIndex,
             item.buildUpon().setSubtitleConfigurations(listOf(subtitle)).build(),
         )
+        p.seekTo(position)
+        p.playWhenReady = wasPlaying
     }
 
     override fun onUserLeaveHint() {
@@ -269,6 +274,11 @@ class VideoPlayerActivity : ComponentActivity() {
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         inPip = isInPictureInPictureMode
+    }
+
+    override fun onPause() {
+        saveResume()
+        super.onPause()
     }
 
     override fun onStop() {

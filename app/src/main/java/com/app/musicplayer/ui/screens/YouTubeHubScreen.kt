@@ -27,11 +27,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -40,15 +42,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun YouTubeHubScreen() {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var searchText by rememberSaveable { mutableStateOf("") }
     var currentUrl by rememberSaveable { mutableStateOf("https://m.youtube.com") }
     var pageTitle by remember { mutableStateOf("YouTube") }
     var webView by remember { mutableStateOf<WebView?>(null) }
+    val currentWebView by rememberUpdatedState(webView)
+
+    BackHandler(enabled = webView?.canGoBack() == true) { webView?.goBack() }
 
     fun loadSearch() {
         val q = searchText.trim()
@@ -137,10 +146,19 @@ fun YouTubeHubScreen() {
         )
     }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> currentWebView?.onPause()
+                Lifecycle.Event.ON_RESUME -> currentWebView?.onResume()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
-            webView?.stopLoading()
-            webView?.destroy()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            currentWebView?.stopLoading()
+            currentWebView?.destroy()
             webView = null
         }
     }

@@ -28,14 +28,14 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.9
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
 
       - name: Run local unit tests
-        run: gradle testDebugUnitTest --stacktrace
+        run: ./gradlew testDebugUnitTest --stacktrace
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -61,8 +61,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.9
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
 
       - name: Launch app on Android emulator
         uses: ReactiveCircus/android-emulator-runner@v2
@@ -73,4 +73,4 @@ jobs:
           profile: pixel_2
           emulator-boot-timeout: 900
           disable-animations: true
-          script: gradle connectedDebugAndroidTest --stacktrace --info
+          script: chmod +x ./gradlew && ./gradlew connectedDebugAndroidTest --stacktrace --info

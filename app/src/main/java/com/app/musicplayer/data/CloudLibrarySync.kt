@@ -213,10 +213,12 @@ class CloudLibrarySync(
             expectedUpdatedAt[song.id] = snapshotStat.updatedAt
             if (current.updatedAt != snapshotStat.updatedAt) return@forEach
             val rating = (value["rating"] as? Number)?.toInt() ?: current.rating
+            val localDelta = (current.plays - snapshotStat.plays).coerceAtLeast(0)
+            val cloudPlays = (value["plays"] as? Number)?.toInt() ?: 0
             updates[song.id] = SongStats(
                 favorite = (value["favorite"] as? Boolean) ?: current.favorite,
                 rating = rating.coerceIn(0, 5),
-                plays = maxOf(current.plays, (value["plays"] as? Number)?.toInt() ?: 0),
+                plays = maxOf(current.plays, cloudPlays + localDelta),
                 lastPlayed = maxOf(current.lastPlayed, (value["lastPlayed"] as? Number)?.toLong() ?: 0L),
                 updatedAt = maxOf(current.updatedAt, (value["updatedAt"] as? Number)?.toLong() ?: 0L),
             )

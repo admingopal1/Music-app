@@ -17,6 +17,7 @@ import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /** Gain / peak values read from a file's ReplayGain tags (dB and linear peak). */
 data class RgInfo(val trackGain: Float?, val trackPeak: Float?, val albumGain: Float?, val albumPeak: Float?)
@@ -151,7 +152,7 @@ override fun queueInput(inputBuffer: ByteBuffer) {
             while (inputBuffer.remaining() >= 2 * channels) {
                 if (current != t) current = if (current < t) min(t, current + step) else max(t, current - step)
                 for (c in 0 until channels) {
-                    val s = (inputBuffer.getShort() * current).toInt().coerceIn(-32768, 32767)
+                    val s = (inputBuffer.getShort() * current).roundToInt().coerceIn(-32768, 32767)
                     out.putShort(s.toShort())
                 }
             }

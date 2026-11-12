@@ -433,6 +433,7 @@ class ShareManager private constructor(context: Context) {
             connections[id] = c
             val input = app.contentResolver.openInputStream(f.uri) ?: throw IOException("Can't read the file")
             val tracker = Tracker(id)
+            var sent = 0L
             input.use { ins ->
                 c.outputStream.use { out ->
                     val buf = ByteArray(64 * 1024)
@@ -441,16 +442,34 @@ class ShareManager private constructor(context: Context) {
                         if (id in cancelled) throw IOException("cancelled")
                         val n = ins.read(buf)
                         if (n < 0) break
+                        if (f.size > 0 && done + n > f.size) throw IOException("File changed while sending (size mismatch)")
                         out.write(buf, 0, n)
                         done += n
                         tracker.add(done)
                     }
+                    if (f.size > 0 && done < f.size) throw IOException("File changed while sending (shorter than expected)")
+                    sent = done
                     setItem(id) { copy(done = done) }
                 }
             }
             when (val code = c.responseCode) {
-                200 -> setItem(id) { copy(status = Status.DONE, speedBps = 0, done = if (size > 0) size else done) }
-                403 -> setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = "Wrong PIN or receiver is not accepting files") }
+                200 -> {
+                    val body = c.inputStream.bufferedReader().use { reader ->
+                        buildString {
+                            while (length < 200) {
+                                val ch = reader.read()
+                                if (ch < 0) break
+                                append(ch.toChar())
+                            }
+                        }
+                    }
+                    if (body.contains("\"ok\":true")) {
+                        setItem(id) { copy(status = Status.DONE, speedBps = 0, done = sent) }
+                    } else {
+                        setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = "Receiver did not confirm the upload (wrong PIN or session stopped)") }
+                    }
+                }
+                401, 403 -> setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = "Wrong PIN or receiver is not accepting files") }
                 else -> setItem(id) { copy(status = Status.FAILED, speedBps = 0, error = "Receiver answered $code") }
             }
         } catch (e: Exception) {

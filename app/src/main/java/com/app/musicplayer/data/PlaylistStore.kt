@@ -15,6 +15,8 @@ class PlaylistStore(context: Context) {
     private val _updatedAt = MutableStateFlow(loadTimestamps("updated_at"))
     val updatedAt: StateFlow<Map<String, Long>> = _updatedAt.asStateFlow()
     private val _deletedAt = MutableStateFlow(loadTimestamps("deleted_at"))
+    private var pendingUpdated: Map<String, Long>? = null
+    private var pendingDeleted: Map<String, Long>? = null
     val deletedAt: StateFlow<Map<String, Long>> = _deletedAt.asStateFlow()
 
     @Synchronized
@@ -99,12 +101,21 @@ class PlaylistStore(context: Context) {
 
     private fun persistUpdatedAt(values: Map<String, Long>) {
         _updatedAt.value = values
-        prefs.edit().putString("updated_at", JSONObject(values.mapValues { it.value }).toString()).apply()
+        pendingUpdated = values
     }
 
     private fun persistDeletedAt(values: Map<String, Long>) {
         _deletedAt.value = values
-        prefs.edit().putString("deleted_at", JSONObject(values.mapValues { it.value }).toString()).apply()
+        pendingDeleted = values
+    }
+
+    @Synchronized
+    fun mergeRestore(map: Map<String, List<Long>>, changed: Set<String>) {
+        val updated = _updatedAt.value.toMutableMap()
+        changed.forEach { name -> updated[name] = nextTimestamp(name) }
+        persistUpdatedAt(updated.filterKeys { it in map.keys })
+        persistDeletedAt(_deletedAt.value.filterKeys { it !in map.keys })
+        commit(map)
     }
 
     private fun loadTimestamps(key: String): Map<String, Long> = try {
@@ -118,7 +129,14 @@ class PlaylistStore(context: Context) {
         _lists.value = map
         val o = JSONObject()
         map.forEach { (k, v) -> o.put(k, JSONArray(v)) }
-        prefs.edit().putString("data", o.toString()).apply()
+        val editor = prefs.edit().putString("data", o.toString())
+        val updated = pendingUpdated ?: _updatedAt.value
+        val deleted = pendingDeleted ?: _deletedAt.value
+        editor.putString("updated_at", JSONObject(updated.mapValues { it.value }).toString())
+        editor.putString("deleted_at", JSONObject(deleted.mapValues { it.value }).toString())
+        editor.apply()
+        pendingUpdated = null
+        pendingDeleted = null
     }
 
     private fun load(): Map<String, List<Long>> = try {
