@@ -78,9 +78,13 @@ override fun queueInput(inputBuffer: ByteBuffer) {
 
     private fun process(inputBuffer: ByteBuffer) {
         val size = inputBuffer.remaining()
+        val src = ByteBuffer.allocate(size)
+src.put(inputBuffer.duplicate())
+src.flip()
+inputBuffer.position(inputBuffer.limit())
         val output = replaceOutputBuffer(size)
         if (encoding == C.ENCODING_PCM_16BIT || encoding == C.ENCODING_PCM_FLOAT) {
-            val samples = inputBuffer.asReadOnlyBuffer().order(ByteOrder.nativeOrder())
+            val samples = src.asReadOnlyBuffer().order(ByteOrder.nativeOrder())
             val bytesPerSample = if (encoding == C.ENCODING_PCM_16BIT) 2 else 4
             val bytesPerFrame = channelCount * bytesPerSample
             while (samples.remaining() >= bytesPerFrame) {
