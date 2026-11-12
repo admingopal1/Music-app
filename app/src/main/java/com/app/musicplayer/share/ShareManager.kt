@@ -266,7 +266,8 @@ class ShareManager private constructor(context: Context) {
     fun hasSession(sid: String) = sessions.containsKey(sid)
 
     /** Bytes already received for [key] (to resume), or -1 when this phone already has the file. */
-    fun status(key: String, name: String, size: Long, print: String?): Long = synchronized(transferLock(key)) {
+    fun status(key: String, name: String, size: Long, print: String?, sid: String?): Long = synchronized(transferLock(key)) {
+        if (sid.isNullOrBlank() || !sessions.containsKey(sid)) return@synchronized -1L
         if (!print.isNullOrBlank() && alreadyHave(name, size, print)) return@synchronized -1L
         val f = partial(key)
         if (f.exists()) f.length().coerceAtMost(size) else 0L
@@ -319,7 +320,7 @@ class ShareManager private constructor(context: Context) {
     private fun receivePartLocked(key: String, name: String, size: Long, offset: Long, sid: String?, input: InputStream, from: String): Long {
         if (size <= 0L || offset !in 0L..size || sid.isNullOrBlank()) return -1L
         val aes = sessions[sid] ?: return -1L
-        val id = itemForKey(key, name, size, from, aes != null)
+        val id = itemForKey(key, name, size, from, secure = true)
         ShareService.start(app)
         val f = partial(key)
         RandomAccessFile(f, "rw").use { it.setLength(offset.coerceAtMost(it.length())) }
