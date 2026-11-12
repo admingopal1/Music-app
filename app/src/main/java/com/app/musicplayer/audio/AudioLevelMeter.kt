@@ -57,7 +57,7 @@ class AudioLevelProcessor : BaseAudioProcessor() {
         return inputAudioFormat
     }
 
-override fun queueInput(inputBuffer: ByteBuffer) {
+    override fun queueInput(inputBuffer: ByteBuffer) {
         if (DspGuard.bypass) {
             val passthrough = replaceOutputBuffer(inputBuffer.remaining())
             passthrough.put(inputBuffer)
@@ -78,13 +78,12 @@ override fun queueInput(inputBuffer: ByteBuffer) {
 
     private fun process(inputBuffer: ByteBuffer) {
         val size = inputBuffer.remaining()
-        val src = ByteBuffer.allocate(size)
-src.put(inputBuffer.duplicate())
-src.flip()
-inputBuffer.position(inputBuffer.limit())
+        // Keep a view of the original PCM for analysis and pass-through. Advancing the
+        // caller's buffer before copying it to output would silently emit an empty buffer.
+        val source = inputBuffer.duplicate()
         val output = replaceOutputBuffer(size)
         if (encoding == C.ENCODING_PCM_16BIT || encoding == C.ENCODING_PCM_FLOAT) {
-            val samples = src.asReadOnlyBuffer().order(ByteOrder.nativeOrder())
+            val samples = source.asReadOnlyBuffer().order(ByteOrder.nativeOrder())
             val bytesPerSample = if (encoding == C.ENCODING_PCM_16BIT) 2 else 4
             val bytesPerFrame = channelCount * bytesPerSample
             while (samples.remaining() >= bytesPerFrame) {
@@ -99,7 +98,8 @@ inputBuffer.position(inputBuffer.limit())
                 acceptSample(mono / channelCount)
             }
         }
-        output.put(inputBuffer)
+        output.put(source)
+        inputBuffer.position(inputBuffer.limit())
         output.flip()
     }
 

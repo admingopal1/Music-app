@@ -47,7 +47,8 @@ jobs:
     runs-on: ubuntu-latest
     # Emulator boot is flaky on hosted runners; keep smoke coverage but never block APK delivery.
     continue-on-error: true
-    timeout-minutes: 30
+    # Cold emulator boot plus a first-time instrumentation compile can exceed 30 minutes.
+    timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
