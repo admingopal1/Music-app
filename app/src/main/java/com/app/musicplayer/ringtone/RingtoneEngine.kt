@@ -254,18 +254,29 @@ private class PcmDecoder(ctx: Context, uri: Uri) : AutoCloseable {
     val durationUs: Long
 
     init {
-        extractor.setDataSource(ctx, uri, null)
-        val track = (0 until extractor.trackCount).firstOrNull {
-            extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-        } ?: run { extractor.release(); error("No audio track") }
-        val fmt = extractor.getTrackFormat(track)
-        extractor.selectTrack(track)
-        channels = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-        rate = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
-        durationUs = if (fmt.containsKey(MediaFormat.KEY_DURATION)) fmt.getLong(MediaFormat.KEY_DURATION) else 0L
-        codec = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
-        codec.configure(fmt, null, null, 0)
-        codec.start()
+        var createdCodec: MediaCodec? = null
+        try {
+            extractor.setDataSource(ctx, uri, null)
+            val track = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: error("No audio track")
+            val fmt = extractor.getTrackFormat(track)
+            extractor.selectTrack(track)
+            channels = fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            rate = fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            durationUs = if (fmt.containsKey(MediaFormat.KEY_DURATION)) fmt.getLong(MediaFormat.KEY_DURATION) else 0L
+            createdCodec = MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
+            codec = createdCodec
+            createdCodec.configure(fmt, null, null, 0)
+            createdCodec.start()
+        } catch (failure: Throwable) {
+            createdCodec?.let { decoder ->
+                runCatching { decoder.stop() }
+                runCatching { decoder.release() }
+            }
+            runCatching { extractor.release() }
+            throw failure
+        }
     }
 
     fun seekUs(us: Long) = extractor.seekTo(us, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
