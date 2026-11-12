@@ -8,12 +8,15 @@ import android.util.Size
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 
 /** Lives inside the playback service: pushes title / artist / art / play state to the home screen widgets. */
 class WidgetBridge(private val ctx: Context, private val player: Player) : Player.Listener {
     private val io = Executors.newSingleThreadExecutor()
     private var artKey: String? = null
+    private val released = AtomicBoolean(false)
+    private val publishLock = Any()
 
     init {
         player.addListener(this)
@@ -31,10 +34,16 @@ class WidgetBridge(private val ctx: Context, private val player: Player) : Playe
         val artChanged = forceArt || key != artKey
         artKey = key
         io.execute {
+            if (released.get()) return@execute
             try {
                 val art = if (artChanged) loadArt(item) else null
-                PlayerWidgets.save(ctx, title, artist, playing, art, replaceArt = artChanged)
-                PlayerWidgets.refreshAll(ctx)
+                // Serialize the final publish with release so an old bridge cannot
+                // publish after a replacement bridge has started updating the widget.
+                synchronized(publishLock) {
+                    if (released.get()) return@execute
+                    PlayerWidgets.save(ctx, title, artist, playing, art, replaceArt = artChanged)
+                    PlayerWidgets.refreshAll(ctx)
+                }
             } catch (e: Exception) {
                 // widgets are best effort
             }
@@ -63,15 +72,22 @@ class WidgetBridge(private val ctx: Context, private val player: Player) : Playe
         return Bitmap.createScaledBitmap(b, (b.width * s).toInt().coerceAtLeast(1), (b.height * s).toInt().coerceAtLeast(1), true)
     }
 
-    fun release() {
+    fun release(clearPlaybackState: Boolean = true) {
+        synchronized(publishLock) {
+            if (!released.compareAndSet(false, true)) return
+        }
         player.removeListener(this)
-        io.execute {
-            val p = ctx.getSharedPreferences("widget_state", Context.MODE_PRIVATE)
-            PlayerWidgets.save(
-                ctx, p.getString("title", "").orEmpty(), p.getString("artist", "").orEmpty(),
-                playing = false, art = null, replaceArt = false,
-            )
-            PlayerWidgets.refreshAll(ctx)
+        if (clearPlaybackState) {
+            io.execute {
+                val p = ctx.getSharedPreferences("widget_state", Context.MODE_PRIVATE)
+                PlayerWidgets.save(
+                    ctx, p.getString("title", "").orEmpty(), p.getString("artist", "").orEmpty(),
+                    playing = false, art = null, replaceArt = false,
+                )
+                PlayerWidgets.refreshAll(ctx)
+                io.shutdown()
+            }
+        } else {
             io.shutdown()
         }
     }

@@ -151,14 +151,14 @@ class MusicService : MediaSessionService() {
         return p
     }
 
-    private fun releaseControllers() {
+    private fun releaseControllers(clearWidgetState: Boolean = true) {
         enhancerController?.release()
         enhancerController = null
         fadeController?.release()
         fadeController = null
         rgController?.release()
         rgController = null
-        widgetBridge?.release()
+        widgetBridge?.release(clearPlaybackState = clearWidgetState)
         widgetBridge = null
     }
 
@@ -175,7 +175,7 @@ class MusicService : MediaSessionService() {
         val shuffle = old.shuffleModeEnabled
         val params = old.playbackParameters
 
-        releaseControllers()
+        releaseControllers(clearWidgetState = false)
         val fresh = buildPlayer(useDsp = false)
         fresh.repeatMode = repeatMode
         fresh.shuffleModeEnabled = shuffle
