@@ -38,8 +38,26 @@ class PlaylistStore(context: Context) {
 
     @Synchronized
     fun replaceAll(map: Map<String, List<Long>>) {
-        persistUpdatedAt(map.keys.associateWith { nextTimestamp(it) })
-        persistDeletedAt(emptyMap())
+        // Only playlists that actually changed get a fresh timestamp. Stamping every playlist
+        // "now" made a local restore win every cloud conflict and dropped existing delete markers.
+        val old = _lists.value
+        val updated = LinkedHashMap(_updatedAt.value)
+        val deleted = LinkedHashMap(_deletedAt.value)
+        for ((name, ids) in map) {
+            if (old[name] != ids) {
+                updated[name] = nextTimestamp(name)
+                deleted.remove(name)
+            }
+        }
+        for (name in old.keys) {
+            if (name !in map) {
+                updated.remove(name)
+                deleted[name] = nextTimestamp(name)
+            }
+        }
+        deleted.keys.removeAll(map.keys)
+        persistUpdatedAt(updated)
+        persistDeletedAt(deleted)
         commit(map)
     }
 

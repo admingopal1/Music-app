@@ -174,16 +174,19 @@ class MusicService : MediaSessionService() {
         val repeatMode = old.repeatMode
         val shuffle = old.shuffleModeEnabled
         val params = old.playbackParameters
+        val volume = old.volume
+        val wasPlaying = old.playWhenReady
 
         releaseControllers()
         val fresh = buildPlayer(useDsp = false)
         fresh.repeatMode = repeatMode
         fresh.shuffleModeEnabled = shuffle
         fresh.playbackParameters = params
+        fresh.volume = volume
         if (items.isNotEmpty()) {
             fresh.setMediaItems(items, index.coerceIn(0, items.lastIndex), position)
             fresh.prepare()
-            fresh.play()
+            if (wasPlaying) fresh.play()
         }
         mediaSession?.player = fresh
         old.release()

@@ -467,7 +467,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             _backupMsg.value = withContext(Dispatchers.IO) {
                 runCatching {
                     val json = backup.export(_songs.value, playlists.lists.value, stats.stats.value)
-                    ctx.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(json.toByteArray()) }
+                    ctx.contentResolver.openOutputStream(uri, "wt")?.use { it.write(json.toByteArray()) }
+                        ?: throw java.io.IOException("Could not open the backup file for writing.")
                     "Backup saved."
                 }.getOrElse { "Backup failed: ${it.message}" }
             }
@@ -478,9 +479,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _backupMsg.value = withContext(Dispatchers.IO) {
                 runCatching {
-                    val r = ctx.contentResolver.openInputStream(uri)!!.use {
+                    val r = ctx.contentResolver.openInputStream(uri)?.use {
                         backup.restore(it, _songs.value, playlists, stats)
-                    }
+                    } ?: throw java.io.IOException("Could not open the backup file.")
                     "Restored ${r.playlists} playlists, ${r.matched} songs matched, ${r.missing} not found on this phone. " +
                         "Restart the app to apply settings and equalizer."
                 }.getOrElse { "Restore failed: ${it.message}" }

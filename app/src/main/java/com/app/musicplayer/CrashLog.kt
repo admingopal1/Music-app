@@ -71,6 +71,8 @@ object CrashLog {
     fun record(label: String, error: Throwable) {
         val ctx = appContext ?: return
         if (recordedThisSession) return
+        // Never replace a report the user has not seen yet (it may be a real crash).
+        if (File(ctx.filesDir, FILE_NAME).exists()) return
         recordedThisSession = true
         try {
             val trace = StringWriter().also { error.printStackTrace(PrintWriter(it)) }.toString()
@@ -102,7 +104,10 @@ fun CrashReportScreen(report: String, onContinue: () -> Unit) {
     Column(
         Modifier.fillMaxSize().background(Color(0xFF121212)).statusBarsPadding().padding(16.dp),
     ) {
-        Text("The app crashed last time", color = Color.White, style = MaterialTheme.typography.titleLarge)
+        Text(
+            if (report.startsWith("Non-fatal")) "A problem was recorded last time" else "The app crashed last time",
+            color = Color.White, style = MaterialTheme.typography.titleLarge,
+        )
         Spacer(Modifier.height(4.dp))
         Text(
             "Copy or share this error and send it to the developer so it can be fixed.",

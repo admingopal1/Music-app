@@ -155,7 +155,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
                 Column {
-                    if (tab != 2) MiniPlayer(vm) { tab = 2 }
+                    if (tab != 2) MiniPlayer(vm) { openTab(2) }
                     Box {
                         NavigationBar(
                             containerColor = Color(0xFF171329).copy(alpha = 0.98f),

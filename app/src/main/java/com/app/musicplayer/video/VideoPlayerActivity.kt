@@ -255,10 +255,13 @@ class VideoPlayerActivity : ComponentActivity() {
             Toast.makeText(this, "No video is currently loaded.", Toast.LENGTH_SHORT).show()
             return
         }
+        val index = p.currentMediaItemIndex
+        val position = p.currentPosition
         p.replaceMediaItem(
-            p.currentMediaItemIndex,
+            index,
             item.buildUpon().setSubtitleConfigurations(listOf(subtitle)).build(),
         )
+        p.seekTo(index, position)
     }
 
     override fun onUserLeaveHint() {

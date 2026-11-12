@@ -356,7 +356,7 @@ class ShareManager private constructor(context: Context) {
 
     // ------------------------------------------------------------------ browser / link downloads (we are the sender)
 
-    fun countingStream(raw: InputStream, f: OutFile, ip: String, startAt: Long): InputStream {
+    fun countingStream(raw: InputStream, f: OutFile, ip: String, startAt: Long, endExclusive: Long = f.size): InputStream {
         val item = newItem(f.name, f.size, Direction.OUT, ip, f.uri, f.mime)
         ShareService.start(app)
         setItem(item.id) { copy(status = Status.ACTIVE, done = startAt) }
@@ -375,7 +375,8 @@ class ShareManager private constructor(context: Context) {
             }
             override fun close() {
                 super.close()
-                val complete = f.size <= 0 || done >= f.size
+                // For a Range request the transfer is complete once the requested range was sent.
+                val complete = endExclusive <= 0 || done >= endExclusive
                 setItem(item.id) {
                     copy(done = done, speedBps = 0, status = if (complete) Status.DONE else Status.FAILED, error = if (complete) null else "Interrupted")
                 }
@@ -428,7 +429,10 @@ class ShareManager private constructor(context: Context) {
             c.doOutput = true
             c.connectTimeout = 6000
             c.readTimeout = 120_000
-            if (f.size > 0) c.setFixedLengthStreamingMode(f.size) else c.setChunkedStreamingMode(64 * 1024)
+            // The receiver needs an exact Content-Length (it cannot decode chunked bodies), so a
+            // provider that reports no (or a zero) size is measured first.
+            val length = if (f.size > 0) f.size else measureLength(f.uri)
+            c.setFixedLengthStreamingMode(length)
             c.setRequestProperty("Content-Type", "application/octet-stream")
             connections[id] = c
             val input = app.contentResolver.openInputStream(f.uri) ?: throw IOException("Can't read the file")
@@ -466,6 +470,20 @@ class ShareManager private constructor(context: Context) {
             conn?.disconnect()
             cancelled.remove(id)
             maybeStopService()
+        }
+    }
+
+    private fun measureLength(uri: Uri): Long {
+        val stream = app.contentResolver.openInputStream(uri) ?: throw IOException("Can't read the file")
+        return stream.use { ins ->
+            val buf = ByteArray(64 * 1024)
+            var total = 0L
+            while (true) {
+                val n = ins.read(buf)
+                if (n < 0) break
+                total += n
+            }
+            total
         }
     }
 

@@ -39,12 +39,12 @@ object SleepTimer {
 
     fun start(minutes: Int) {
         cancel()
-        val p = player ?: return
+        val initial = player ?: return
         val durationMs = PlaybackOptions.sleepDurationMs(minutes)
         if (durationMs <= 0L) return
 
         // Fade relative to whatever volume the user currently has, and restore it afterwards.
-        val base = p.volume
+        val base = initial.volume
         baseVolume = base
         job = scope.launch {
             // elapsedRealtime is monotonic, so wall-clock changes cannot make the timer early or late.
@@ -54,12 +54,16 @@ object SleepTimer {
                 _leftMs.value = left
                 if (left <= 0L) break
                 if (left <= PlaybackOptions.SLEEP_FADE_DURATION_MS) {
-                    runCatching { p.volume = PlaybackOptions.sleepVolume(base, left) }
+                    // Always use the current player: MusicService may have replaced (and released)
+                    // the one that was active when the timer started.
+                    player?.let { current ->
+                        runCatching { current.volume = PlaybackOptions.sleepVolume(base, left) }
+                    }
                 }
                 delay(minOf(1_000L, left))
             }
             _leftMs.value = 0L
-            runCatching { p.pause() }
+            player?.let { current -> runCatching { current.pause() } }
             restoreVolume()
         }
     }

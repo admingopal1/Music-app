@@ -74,8 +74,11 @@ object ArtLoader {
     private val cache = LruCache<Long, Bitmap>(24)
 
     suspend fun load(ctx: Context, song: Song): Bitmap? = withContext(Dispatchers.IO) {
-        cache.get(song.id)
-            ?: (thumbnail(ctx, song) ?: embedded(ctx, song) ?: legacy(ctx, song))?.also { cache.put(song.id, it) }
+        val cacheable = song.id >= 0L
+        val cached: Bitmap? = if (cacheable) cache.get(song.id) else null
+        cached ?: (thumbnail(ctx, song) ?: embedded(ctx, song) ?: legacy(ctx, song))?.also {
+            if (cacheable) cache.put(song.id, it)
+        }
     }
 
     private fun thumbnail(ctx: Context, s: Song): Bitmap? =

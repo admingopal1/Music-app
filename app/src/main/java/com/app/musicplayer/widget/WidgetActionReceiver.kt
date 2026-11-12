@@ -20,21 +20,28 @@ class WidgetActionReceiver : BroadcastReceiver() {
         val token = SessionToken(app, ComponentName(app, MusicService::class.java))
         val future = MediaController.Builder(app, token).buildAsync()
         future.addListener({
+            val c = try {
+                future.get()
+            } catch (e: Exception) {
+                pending.finish()
+                return@addListener
+            }
             try {
-                val c = future.get()
                 when (action) {
                     PlayerWidgets.ACTION_PLAY_PAUSE -> if (c.isPlaying) c.pause() else c.play()
                     PlayerWidgets.ACTION_NEXT -> c.seekToNextMediaItem()
                     PlayerWidgets.ACTION_PREV -> c.seekToPreviousMediaItem()
                 }
-                // give the command a moment to reach the service before disconnecting
-                Handler(Looper.getMainLooper()).postDelayed({
-                    c.release()
-                    pending.finish()
-                }, 400)
             } catch (e: Exception) {
+                c.release()
                 pending.finish()
+                return@addListener
             }
+            // give the command a moment to reach the service before disconnecting
+            Handler(Looper.getMainLooper()).postDelayed({
+                c.release()
+                pending.finish()
+            }, 400)
         }, ContextCompat.getMainExecutor(app))
     }
 }

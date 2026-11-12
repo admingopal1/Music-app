@@ -53,6 +53,9 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
             ?: "file"
         val name = sanitize(raw)
         val length = session.headers["content-length"]?.toLongOrNull() ?: -1L
+        if (length < 0L) {
+            return text(Status.lookup(411) ?: Status.BAD_REQUEST, "A Content-Length header is required.")
+        }
         if (length > ShareManager.MAX_UPLOAD_BYTES) {
             return text(Status.lookup(413) ?: Status.INTERNAL_ERROR, "File exceeds the 2 GiB upload limit.")
         }
@@ -75,6 +78,7 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
         if (range != null) {
             val parsed = SingleByteRange.parse(range, total)
                 ?: return text(Status.RANGE_NOT_SATISFIABLE, "Bad range")
+                    .also { it.addHeader("Content-Range", "bytes */$total") }
             start = parsed.start
             end = parsed.endInclusive
             partial = true
@@ -84,7 +88,7 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
             runCatching { raw.close() }
             return text(Status.INTERNAL_ERROR, "Could not seek to the requested byte range.")
         }
-        val stream = mgr.countingStream(raw, f, ip, start)
+        val stream = mgr.countingStream(raw, f, ip, start, if (total > 0) end + 1 else total)
         val len = if (total > 0) end - start + 1 else -1L
         val res = if (len >= 0) {
             newFixedLengthResponse(if (partial) Status.PARTIAL_CONTENT else Status.OK, f.mime, stream, len)
@@ -109,6 +113,7 @@ class ShareServer(port: Int, private val mgr: ShareManager) : NanoHTTPD(port) {
         n.substringAfterLast('/').substringAfterLast('\\')
             .replace(Regex("[\\u0000-\\u001f:*?\"<>|]"), "_")
             .trim().take(150).ifBlank { "file" }
+            .let { if (it == "." || it == "..") "file" else it }
 
     private fun jsonEsc(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
     private fun esc(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
