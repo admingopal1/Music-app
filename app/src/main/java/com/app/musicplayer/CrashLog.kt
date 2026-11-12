@@ -48,6 +48,7 @@ class MusicApp : Application() {
  */
 object CrashLog {
     private const val FILE_NAME = "last_crash.txt"
+    private const val RUNTIME_ERROR_FILE_NAME = "last_runtime_error.txt"
     private var appContext: Context? = null
     @Volatile private var recordedThisSession = false
 
@@ -68,14 +69,20 @@ object CrashLog {
         }
     }
 
+    /**
+     * Records a recoverable runtime/playback failure for diagnostics.
+     *
+     * This must never populate [FILE_NAME]: MainActivity treats that file as an
+     * uncaught process crash and blocks the normal app UI until the user dismisses it.
+     */
     fun record(label: String, error: Throwable) {
         val ctx = appContext ?: return
         if (recordedThisSession) return
         recordedThisSession = true
         try {
             val trace = StringWriter().also { error.printStackTrace(PrintWriter(it)) }.toString()
-            val header = "Non-fatal error: $label\nTime: ${Date()}\nDevice: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})\n\n"
-            File(ctx.filesDir, FILE_NAME).writeText((header + trace).take(20_000))
+            val header = "Recoverable error: $label\nTime: ${Date()}\nDevice: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})\n\n"
+            File(ctx.filesDir, RUNTIME_ERROR_FILE_NAME).writeText((header + trace).take(20_000))
         } catch (_: Throwable) { }
     }
 
