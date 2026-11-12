@@ -25,10 +25,19 @@ object SleepTimer {
     private var job: Job? = null
     private var baseVolume: Float? = null
     private var player: Player? = null
+    private var deadlineElapsed: Long? = null
 
     /** Called by MusicService once the player exists. */
     fun attach(p: Player) {
         player = p
+        // DSP fallback can replace the ExoPlayer while a sleep timer is running.
+        // Reapply the current fade level to the replacement player.
+        val base = baseVolume ?: return
+        val deadline = deadlineElapsed ?: return
+        val left = PlaybackOptions.remainingMs(deadline, SystemClock.elapsedRealtime())
+        if (left <= PlaybackOptions.SLEEP_FADE_DURATION_MS) {
+            runCatching { p.volume = PlaybackOptions.sleepVolume(base, left) }
+        }
     }
 
     /** Called by MusicService when it is destroyed. */
@@ -49,17 +58,22 @@ object SleepTimer {
         job = scope.launch {
             // elapsedRealtime is monotonic, so wall-clock changes cannot make the timer early or late.
             val deadline = SystemClock.elapsedRealtime() + durationMs
+            deadlineElapsed = deadline
             while (true) {
                 val left = PlaybackOptions.remainingMs(deadline, SystemClock.elapsedRealtime())
                 _leftMs.value = left
                 if (left <= 0L) break
                 if (left <= PlaybackOptions.SLEEP_FADE_DURATION_MS) {
-                    runCatching { p.volume = PlaybackOptions.sleepVolume(base, left) }
+                    // Always target the currently attached player; DSP fallback may replace it.
+                    player?.let { current ->
+                        runCatching { current.volume = PlaybackOptions.sleepVolume(base, left) }
+                    }
                 }
                 delay(minOf(1_000L, left))
             }
             _leftMs.value = 0L
-            runCatching { p.pause() }
+            player?.let { current -> runCatching { current.pause() } }
+            deadlineElapsed = null
             restoreVolume()
         }
     }
@@ -67,6 +81,7 @@ object SleepTimer {
     fun cancel() {
         job?.cancel()
         job = null
+        deadlineElapsed = null
         _leftMs.value = 0L
         restoreVolume()
     }
