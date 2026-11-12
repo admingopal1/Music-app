@@ -1,6 +1,10 @@
 package com.app.musicplayer.ui.screens
 
 import android.annotation.SuppressLint
+import android.os.Build
+import android.net.Uri
+import android.webkit.SslErrorHandler
+import android.net.http.SslError
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -40,6 +44,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+
+private val YOUTUBE_WEB_HOSTS = listOf(
+    "youtube.com", "youtube-nocookie.com", "youtu.be",
+    "google.com", "google.co.in", "gstatic.com",
+)
+
+private fun isTrustedYoutubeNavigation(rawUrl: String): Boolean {
+    val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return false
+    val host = uri.host?.lowercase() ?: return false
+    return uri.scheme.equals("https", ignoreCase = true) &&
+        YOUTUBE_WEB_HOSTS.any { host == it || host.endsWith(".$it") }
+}
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -118,9 +134,30 @@ fun YouTubeHubScreen() {
                     settings.mediaPlaybackRequiresUserGesture = true
                     settings.loadsImagesAutomatically = true
                     settings.cacheMode = WebSettings.LOAD_DEFAULT
+                    settings.allowFileAccess = false
+                    settings.allowContentAccess = false
+                    settings.javaScriptCanOpenWindowsAutomatically = false
+                    settings.setSupportMultipleWindows(false)
+                    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        settings.safeBrowsingEnabled = true
+                    }
                     settings.userAgentString = WebSettings.getDefaultUserAgent(it)
                     webChromeClient = WebChromeClient()
                     webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(view: WebView, request: android.webkit.WebResourceRequest): Boolean {
+                            return !isTrustedYoutubeNavigation(request.url.toString())
+                        }
+
+                        @Suppress("DEPRECATION")
+                        override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean {
+                            return !isTrustedYoutubeNavigation(url)
+                        }
+
+                        override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
+                            handler.cancel()
+                        }
+
                         override fun onPageFinished(view: WebView, url: String) {
                             currentUrl = url
                             pageTitle = view.title?.take(36) ?: "YouTube"
