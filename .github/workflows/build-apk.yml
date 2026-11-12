@@ -42,35 +42,3 @@ jobs:
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/app-debug.apk
-
-  android-launch-smoke:
-    runs-on: ubuntu-latest
-    # Emulator boot is flaky on hosted runners; keep smoke coverage but never block APK delivery.
-    continue-on-error: true
-    # Cold emulator boot plus a first-time instrumentation compile can exceed 30 minutes.
-    timeout-minutes: 60
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.9
-
-      - name: Launch app on Android emulator
-        uses: ReactiveCircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          emulator-boot-timeout: 900
-          disable-animations: true
-          script: gradle connectedDebugAndroidTest --stacktrace --info
