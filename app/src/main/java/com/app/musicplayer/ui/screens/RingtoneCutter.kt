@@ -109,7 +109,10 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
     var pausedMain by remember { mutableStateOf(false) }
 
     fun stopPreview(resumeMusic: Boolean = false) {
-        player.value?.runCatching { stop(); release() }
+        player.value?.let { preview ->
+            runCatching { preview.stop() }
+            runCatching { preview.release() }
+        }
         player.value = null; playing = false; playPos = -1L
         if (resumeMusic && pausedMain) {
             pausedMain = false
@@ -162,7 +165,8 @@ fun RingtoneCutterDialog(vm: PlayerViewModel, song: Song, onDismiss: () -> Unit)
                     else -> 1f
                 }
                 runCatching { mp.setVolume(v, v) }
-                if (pos >= endMs) { stopPreview(resumeMusic = true); break }
+                val finished = runCatching { !mp.isPlaying }.getOrDefault(true)
+                if (pos >= endMs || finished) { stopPreview(resumeMusic = true); break }
                 delay(40)
             }
         }
