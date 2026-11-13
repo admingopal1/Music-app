@@ -2,6 +2,8 @@ package com.app.musicplayer.ui.screens
 
 import androidx.compose.runtime.collectAsState
 import com.app.musicplayer.download.SocialDownloader
+import com.app.musicplayer.download.AudioStreamExtractor
+import com.app.musicplayer.ui.PlayerViewModel
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
@@ -57,6 +59,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -73,7 +77,7 @@ private data class DownloadRow(
 )
 
 @Composable
-fun DownloadsHubScreen(onSaved: () -> Unit = {}) {
+fun DownloadsHubScreen(vm: PlayerViewModel, onSaved: () -> Unit = {}) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
@@ -81,6 +85,9 @@ fun DownloadsHubScreen(onSaved: () -> Unit = {}) {
     var rows by remember { mutableStateOf(emptyList<DownloadRow>()) }
     var loading by remember { mutableStateOf(false) }
     var platformHint by remember { mutableStateOf<String?>(null) }
+    var extractingAudio by remember { mutableStateOf(false) }
+    var extractionMessage by remember { mutableStateOf<String?>(null) }
+    var extractionJob by remember { mutableStateOf<Job?>(null) }
     val socialTask by SocialDownloader.task.collectAsState()
     val savedCount by SocialDownloader.savedCount.collectAsState()
     // Refresh the Videos list whenever a social download finishes (also when returning to this tab).
@@ -99,6 +106,35 @@ fun DownloadsHubScreen(onSaved: () -> Unit = {}) {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }.onFailure {
             Toast.makeText(context, "No browser available to open this link", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun playInBackground() {
+        val pageUrl = url.trim()
+        val parsed = Uri.parse(pageUrl)
+        if (parsed.scheme !in setOf("http", "https") || parsed.host.isNullOrBlank()) {
+            Toast.makeText(context, "Enter a valid public media link first", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (extractingAudio) return
+        extractionJob = scope.launch {
+            extractingAudio = true
+            extractionMessage = "Starting audio extraction…"
+            try {
+                val stream = AudioStreamExtractor.extract(context, pageUrl) { stage ->
+                    scope.launch { extractionMessage = stage }
+                }
+                vm.playStream(stream.url, stream.title, stream.artist, stream.thumbnailUrl, stream.httpHeaders)
+                extractionMessage = "Playing “${stream.title}” in the background. You can lock your screen."
+                url = ""
+            } catch (cancelled: CancellationException) {
+                extractionMessage = "Audio extraction cancelled."
+            } catch (error: Exception) {
+                extractionMessage = error.message ?: "Could not extract audio from this link."
+            } finally {
+                extractingAudio = false
+                extractionJob = null
+            }
         }
     }
 
@@ -240,6 +276,34 @@ fun DownloadsHubScreen(onSaved: () -> Unit = {}) {
                             Spacer(Modifier.width(6.dp))
                             Text("Download")
                         }
+                    }
+                    Button(
+                        onClick = ::playInBackground,
+                        enabled = url.isNotBlank() && !extractingAudio,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (extractingAudio) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.width(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Preparing audio…")
+                        } else {
+                            Text("Play in Background")
+                        }
+                    }
+                    if (extractingAudio) {
+                        TextButton(onClick = { extractionJob?.cancel() }) { Text("Cancel extraction") }
+                    }
+                    extractionMessage?.let { message ->
+                        Text(
+                            message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (message.contains("could not", true) || message.contains("failed", true))
+                                MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     Text(
                         "Direct files (MP4, WebM, MKV, MOV, M4V, audio) are saved in Downloads/MusicPlayer. Public links from Instagram, Facebook, TikTok, X, Reddit and Vimeo are saved in your Videos. Only download your own content or content you have permission to save. Private posts are not supported.",
