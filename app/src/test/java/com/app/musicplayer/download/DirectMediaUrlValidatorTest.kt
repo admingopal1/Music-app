@@ -38,4 +38,22 @@ class DirectMediaUrlValidatorTest {
         assertTrue(DirectMediaUrlValidator.validate("https://user:pass@example.com/video.mp4") is DirectMediaUrlResult.Invalid)
         assertTrue(DirectMediaUrlValidator.validate("https://example.com:99999/video.mp4") is DirectMediaUrlResult.Invalid)
     }
+
+    @Test fun identifiesCommonIndianAndGlobalVideoPlatforms() {
+        val cases = mapOf(
+            "https://youtu.be/abc123" to "YouTube",
+            "https://x.com/user/status/123" to "X",
+            "https://t.me/channel/123" to "Telegram",
+            "https://sharechat.com/video/abc" to "ShareChat",
+            "https://mojapp.in/video/abc" to "Moj",
+            "https://myjosh.in/video/abc" to "Josh",
+            "https://www.chingari.io/video/abc" to "Chingari",
+            "https://www.roposo.com/video/abc" to "Roposo",
+        )
+        cases.forEach { (url, expected) ->
+            val result = DirectMediaUrlValidator.validate(url)
+            assertTrue("$url should be identified as a social link", result is DirectMediaUrlResult.Social)
+            assertEquals(expected, (result as DirectMediaUrlResult.Social).platform)
+        }
+    }
 }
