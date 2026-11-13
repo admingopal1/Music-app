@@ -61,6 +61,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.net.URLDecoder
 
 private data class DownloadRow(
@@ -82,6 +84,7 @@ fun DownloadsHubScreen() {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
+    val refreshMutex = remember { Mutex() }
     var url by remember { mutableStateOf("") }
     var rows by remember { mutableStateOf(emptyList<DownloadRow>()) }
     var loading by remember { mutableStateOf(false) }
@@ -94,7 +97,7 @@ fun DownloadsHubScreen() {
     var downloadSamples by remember { mutableStateOf(emptyMap<Long, DownloadSample>()) }
     var downloadSpeeds by remember { mutableStateOf(emptyMap<Long, DownloadSpeed>()) }
 
-    suspend fun refreshRows() {
+    suspend fun refreshRows() = refreshMutex.withLock {
         val now = System.currentTimeMillis()
         val freshRows = try {
             withContext(Dispatchers.IO) { queryDownloads(context) }
