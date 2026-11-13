@@ -32,6 +32,11 @@ android {
         jvmTarget = "17"
     }
 
+    packaging {
+        // yt-dlp's bundled Python/ffmpeg binaries must be extracted to disk to be executed.
+        jniLibs { useLegacyPackaging = true }
+    }
+
     buildFeatures {
         compose = true
     }
@@ -63,6 +68,9 @@ dependencies {
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("org.nanohttpd:nanohttpd:2.3.1")
+    // yt-dlp + ffmpeg inside the app (public social video links)
+    implementation("io.github.junkfood02.youtubedl-android:library:0.17.4")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.17.4")
     // Firebase client SDKs (project-specific google-services.json still required for runtime use)
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-auth")
