@@ -474,10 +474,18 @@ fun DownloadsHubScreen() {
                             }
                             if (item.status == "Failed" && item.sourceUri.isNotBlank()) {
                                 TextButton(onClick = {
-                                    val source = Uri.parse(item.sourceUri)
-                                    if (source.scheme !in setOf("http", "https") || source.host.isNullOrBlank()) {
-                                        Toast.makeText(context, "Retry unavailable: original media URL is invalid", Toast.LENGTH_LONG).show()
-                                    } else {
+                                    val retryValidation = DirectMediaUrlValidator.validate(item.sourceUri)
+                                    if (retryValidation !is DirectMediaUrlResult.Valid) {
+                                        val message = when (retryValidation) {
+                                            is DirectMediaUrlResult.Invalid -> "Retry unavailable: ${retryValidation.message}"
+                                            is DirectMediaUrlResult.Social -> "Retry unavailable: this is a social post page, not a direct media file"
+                                            is DirectMediaUrlResult.Valid -> ""
+                                        }
+                                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                                        return@TextButton
+                                    }
+                                    val source = Uri.parse(retryValidation.url)
+                                    run {
                                         val alreadyActive = runCatching { hasActiveDownload(context, source.toString()) }
                                             .getOrElse {
                                                 Toast.makeText(context, "Could not check existing downloads. Please try again.", Toast.LENGTH_LONG).show()
