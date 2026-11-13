@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -87,6 +88,7 @@ fun DownloadsHubScreen() {
     var selectedFilter by remember { mutableStateOf("All") }
     var searchQuery by remember { mutableStateOf("") }
     var selectedSort by remember { mutableStateOf("Newest") }
+    var pendingDelete by remember { mutableStateOf<DownloadRow?>(null) }
     var downloadSamples by remember { mutableStateOf(emptyMap<Long, DownloadSample>()) }
     var downloadSpeeds by remember { mutableStateOf(emptyMap<Long, DownloadSpeed>()) }
 
@@ -198,6 +200,30 @@ fun DownloadsHubScreen() {
             delay(1_500)
             refreshRows()
         }
+    }
+
+    pendingDelete?.let { download ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Delete downloaded file?") },
+            text = { Text("\"${download.title}\" will be removed from Downloads/MusicPlayer. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    runCatching {
+                        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                        manager.remove(download.id)
+                        pendingDelete = null
+                        refresh()
+                    }.onFailure {
+                        pendingDelete = null
+                        Toast.makeText(context, "Could not delete downloaded file: ${it.message}", Toast.LENGTH_LONG).show()
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Keep file") }
+            },
+        )
     }
 
     LazyColumn(
@@ -449,12 +475,20 @@ fun DownloadsHubScreen() {
                                 }
                             }
                             TextButton(onClick = {
-                                val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                manager.remove(item.id)
-                                refresh()
+                                if (item.status == "Completed") {
+                                    pendingDelete = item
+                                } else {
+                                    runCatching {
+                                        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                        manager.remove(item.id)
+                                        refresh()
+                                    }.onFailure {
+                                        Toast.makeText(context, "Could not cancel or remove download: ${it.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
                             }) {
                                 Icon(Icons.Rounded.Delete, contentDescription = null)
-                                Text(if (item.status == "Completed" || item.status == "Failed") "Remove" else "Cancel")
+                                Text(if (item.status == "Completed") "Delete file" else if (item.status == "Failed") "Remove" else "Cancel")
                             }
                         }
                     }
