@@ -70,6 +70,9 @@ private data class DownloadRow(
     val failureReason: String,
 )
 
+private data class DownloadSample(val bytes: Long, val timeMillis: Long)
+private data class DownloadSpeed(val bytesPerSecond: Long, val etaSeconds: Long?)
+
 @Composable
 fun DownloadsHubScreen() {
     val context = LocalContext.current
@@ -81,12 +84,39 @@ fun DownloadsHubScreen() {
     var platformHint by remember { mutableStateOf<String?>(null) }
     var selectedFilter by remember { mutableStateOf("All") }
     var searchQuery by remember { mutableStateOf("") }
+    var downloadSamples by remember { mutableStateOf(emptyMap<Long, DownloadSample>()) }
+    var downloadSpeeds by remember { mutableStateOf(emptyMap<Long, DownloadSpeed>()) }
+
+    suspend fun refreshRows() {
+        val now = System.currentTimeMillis()
+        val freshRows = withContext(Dispatchers.IO) { queryDownloads(context) }
+        val nextSamples = mutableMapOf<Long, DownloadSample>()
+        val nextSpeeds = mutableMapOf<Long, DownloadSpeed>()
+        freshRows.filter { it.status == "Downloading" }.forEach { item ->
+            val previous = downloadSamples[item.id]
+            if (previous != null && now > previous.timeMillis && item.downloaded >= previous.bytes) {
+                val elapsed = now - previous.timeMillis
+                val speed = ((item.downloaded - previous.bytes) * 1000L / elapsed).coerceAtLeast(0L)
+                if (speed > 0L) {
+                    val remaining = (item.total - item.downloaded).takeIf { item.total > 0L && it > 0L }
+                    nextSpeeds[item.id] = DownloadSpeed(speed, remaining?.let { (it / speed).coerceAtLeast(1L) })
+                }
+            }
+            nextSamples[item.id] = DownloadSample(item.downloaded, now)
+        }
+        downloadSamples = nextSamples
+        downloadSpeeds = nextSpeeds
+        rows = freshRows
+    }
 
     fun refresh() {
         scope.launch {
             loading = true
-            rows = withContext(Dispatchers.IO) { queryDownloads(context) }
-            loading = false
+            try {
+                refreshRows()
+            } finally {
+                loading = false
+            }
         }
     }
 
@@ -155,7 +185,7 @@ fun DownloadsHubScreen() {
     androidx.compose.runtime.LaunchedEffect(hasActiveDownloads) {
         while (hasActiveDownloads) {
             delay(1_500)
-            rows = withContext(Dispatchers.IO) { queryDownloads(context) }
+            refreshRows()
         }
     }
 
@@ -328,6 +358,15 @@ fun DownloadsHubScreen() {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            downloadSpeeds[item.id]?.let { speed ->
+                                val eta = speed.etaSeconds?.let(::formatDuration)
+                                Text(
+                                    if (eta != null) "${formatBytes(speed.bytesPerSecond)}/s  •  ETA $eta"
+                                    else "${formatBytes(speed.bytesPerSecond)}/s",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (item.status == "Failed" && item.sourceUri.isNotBlank()) {
@@ -495,4 +534,16 @@ private fun formatBytes(value: Long): String = when {
     value >= 1024L * 1024 -> "%.1f MB".format(value / (1024.0 * 1024))
     value >= 1024L -> "%.0f KB".format(value / 1024.0)
     else -> "${value} B"
+}
+
+private fun formatDuration(seconds: Long): String {
+    val safe = seconds.coerceAtLeast(0L)
+    val hours = safe / 3600L
+    val minutes = (safe % 3600L) / 60L
+    val remainingSeconds = safe % 60L
+    return when {
+        hours > 0L -> "${hours}h ${minutes}m"
+        minutes > 0L -> "${minutes}m ${remainingSeconds}s"
+        else -> "${remainingSeconds}s"
+    }
 }
