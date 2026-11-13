@@ -580,20 +580,29 @@ private fun hasActiveDownload(context: Context, sourceUri: String): Boolean {
 
 private fun uniqueDownloadFileName(context: Context, requestedName: String): String {
     val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    val cursor = manager.query(DownloadManager.Query()) ?: return requestedName
-    val alreadyUsed = cursor.use { c ->
-        val titleCol = c.getColumnIndex(DownloadManager.COLUMN_TITLE)
-        if (titleCol < 0) false else {
-            var found = false
-            while (c.moveToNext() && !found) found = c.getString(titleCol).equals(requestedName, ignoreCase = true)
-            found
+    val alreadyUsed = runCatching {
+        val cursor = manager.query(DownloadManager.Query()) ?: return@runCatching null
+        cursor.use { c ->
+            val titleCol = c.getColumnIndex(DownloadManager.COLUMN_TITLE)
+            if (titleCol < 0) null else {
+                var found = false
+                while (c.moveToNext() && !found) {
+                    found = c.getString(titleCol).equals(requestedName, ignoreCase = true)
+                }
+                found
+            }
         }
-    }
-    if (!alreadyUsed) return requestedName
+    }.getOrNull()
+
+    // If the history cannot be checked reliably, prefer a distinct name over risking a collision.
+    if (alreadyUsed == false) return requestedName
+
     val dot = requestedName.lastIndexOf('.')
     val base = if (dot > 0) requestedName.substring(0, dot) else requestedName
     val extension = if (dot > 0) requestedName.substring(dot) else ""
-    return "${base.take(70)}-${System.currentTimeMillis()}$extension"
+    val suffix = if (alreadyUsed == true) System.currentTimeMillis().toString()
+        else "download-${System.currentTimeMillis()}"
+    return "${base.take(70)}-$suffix$extension"
 }
 
 private fun uniqueRetryFileName(title: String): String {
