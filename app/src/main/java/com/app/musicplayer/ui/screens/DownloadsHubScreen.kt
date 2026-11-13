@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.OpenInBrowser
 import androidx.compose.material.icons.rounded.Delete
@@ -369,6 +370,15 @@ fun DownloadsHubScreen() {
                             }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (item.sourceUri.isNotBlank()) {
+                                TextButton(onClick = {
+                                    clipboard.setText(AnnotatedString(item.sourceUri))
+                                    Toast.makeText(context, "Source link copied", Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Icon(Icons.Rounded.ContentCopy, contentDescription = null)
+                                    Text("Copy link")
+                                }
+                            }
                             if (item.status == "Failed" && item.sourceUri.isNotBlank()) {
                                 TextButton(onClick = {
                                     val source = Uri.parse(item.sourceUri)
