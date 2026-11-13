@@ -65,7 +65,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.net.URLDecoder
 
 private data class DownloadRow(
     val id: Long,
@@ -184,7 +183,7 @@ fun DownloadsHubScreen() {
             Toast.makeText(context, "This media URL is already queued or downloading", Toast.LENGTH_LONG).show()
             return
         }
-        val rawName = runCatching { URLDecoder.decode(validUrl.fileName, "UTF-8") }.getOrNull().orEmpty()
+        val rawName = validUrl.fileName
         val requestedName = rawName.replace(Regex("[^A-Za-z0-9._ -]"), "_").trim().trim('.').take(100)
             .ifBlank { "media_${System.currentTimeMillis()}.mp4" }
         runCatching {
@@ -632,8 +631,7 @@ private fun uniqueDownloadFileName(context: Context, requestedName: String): Str
 }
 
 private fun uniqueRetryFileName(title: String): String {
-    val decoded = runCatching { URLDecoder.decode(title, "UTF-8") }.getOrDefault(title)
-    val safe = decoded.replace(Regex("[^A-Za-z0-9._ -]"), "_")
+    val safe = title.replace(Regex("[^A-Za-z0-9._ -]"), "_")
         .trim().trim('.').take(90).ifBlank { "media" }
     val dot = safe.lastIndexOf('.')
     val base = if (dot > 0) safe.substring(0, dot) else safe
