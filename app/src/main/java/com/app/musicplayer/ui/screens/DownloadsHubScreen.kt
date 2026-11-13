@@ -178,8 +178,10 @@ fun DownloadsHubScreen() {
         val rawName = runCatching { URLDecoder.decode(validUrl.fileName, "UTF-8") }.getOrNull().orEmpty()
         val requestedName = rawName.replace(Regex("[^A-Za-z0-9._ -]"), "_").trim().trim('.').take(100)
             .ifBlank { "media_${System.currentTimeMillis()}.mp4" }
-        val safeName = uniqueDownloadFileName(context, requestedName)
         runCatching {
+            // Include filename lookup in the guarded block so DownloadManager failures
+            // are reported to the user instead of escaping the click handler.
+            val safeName = uniqueDownloadFileName(context, requestedName)
             val request = DownloadManager.Request(parsed)
                 .setTitle(safeName)
                 .setDescription("Downloading to Downloads/MusicPlayer")
