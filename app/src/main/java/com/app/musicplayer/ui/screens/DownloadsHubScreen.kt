@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -84,6 +85,7 @@ fun DownloadsHubScreen() {
     var url by remember { mutableStateOf("") }
     var rows by remember { mutableStateOf(emptyList<DownloadRow>()) }
     var loading by remember { mutableStateOf(false) }
+    var refreshError by remember { mutableStateOf<String?>(null) }
     var platformHint by remember { mutableStateOf<String?>(null) }
     var selectedFilter by remember { mutableStateOf("All") }
     var searchQuery by remember { mutableStateOf("") }
@@ -94,7 +96,17 @@ fun DownloadsHubScreen() {
 
     suspend fun refreshRows() {
         val now = System.currentTimeMillis()
-        val freshRows = withContext(Dispatchers.IO) { queryDownloads(context) }
+        val freshRows = try {
+            withContext(Dispatchers.IO) { queryDownloads(context) }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            refreshError = error.message?.takeIf { it.isNotBlank() }
+                ?.let { "Could not refresh downloads: $it" }
+                ?: "Could not refresh downloads. Check Android Download Manager and try again."
+            return
+        }
+        refreshError = null
         val nextSamples = mutableMapOf<Long, DownloadSample>()
         val nextSpeeds = mutableMapOf<Long, DownloadSpeed>()
         freshRows.filter { it.status == "Downloading" }.forEach { item ->
@@ -315,6 +327,29 @@ fun DownloadsHubScreen() {
                 TextButton(onClick = ::refresh) {
                     Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
                     Text("Refresh")
+                }
+            }
+        }
+        if (refreshError != null) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            refreshError.orEmpty(),
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(onClick = ::refresh) { Text("Retry") }
+                    }
                 }
             }
         }
