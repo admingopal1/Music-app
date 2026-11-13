@@ -166,7 +166,12 @@ fun DownloadsHubScreen() {
         }
         val validUrl = validation as DirectMediaUrlResult.Valid
         val parsed = Uri.parse(validUrl.url)
-        if (hasActiveDownload(context, parsed.toString())) {
+        val alreadyActive = runCatching { hasActiveDownload(context, parsed.toString()) }
+            .getOrElse {
+                Toast.makeText(context, "Could not check existing downloads. Please try again.", Toast.LENGTH_LONG).show()
+                return
+            }
+        if (alreadyActive) {
             Toast.makeText(context, "This media URL is already queued or downloading", Toast.LENGTH_LONG).show()
             return
         }
@@ -472,9 +477,16 @@ fun DownloadsHubScreen() {
                                     val source = Uri.parse(item.sourceUri)
                                     if (source.scheme !in setOf("http", "https") || source.host.isNullOrBlank()) {
                                         Toast.makeText(context, "Retry unavailable: original media URL is invalid", Toast.LENGTH_LONG).show()
-                                    } else if (hasActiveDownload(context, source.toString())) {
-                                        Toast.makeText(context, "This media URL is already queued or downloading", Toast.LENGTH_LONG).show()
                                     } else {
+                                        val alreadyActive = runCatching { hasActiveDownload(context, source.toString()) }
+                                            .getOrElse {
+                                                Toast.makeText(context, "Could not check existing downloads. Please try again.", Toast.LENGTH_LONG).show()
+                                                return@TextButton
+                                            }
+                                        if (alreadyActive) {
+                                            Toast.makeText(context, "This media URL is already queued or downloading", Toast.LENGTH_LONG).show()
+                                            return@TextButton
+                                        }
                                         runCatching {
                                             val retryName = uniqueRetryFileName(item.title)
                                             val request = DownloadManager.Request(source)
@@ -541,11 +553,12 @@ fun DownloadsHubScreen() {
 /** Avoid duplicate active URLs and filename collisions in the shared Downloads/MusicPlayer folder. */
 private fun hasActiveDownload(context: Context, sourceUri: String): Boolean {
     val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-    val cursor = manager.query(DownloadManager.Query()) ?: return false
+    val cursor = manager.query(DownloadManager.Query())
+        ?: throw IllegalStateException("DownloadManager query returned no results")
     return cursor.use { c ->
         val uriCol = c.getColumnIndex(DownloadManager.COLUMN_URI)
         val statusCol = c.getColumnIndex(DownloadManager.COLUMN_STATUS)
-        if (uriCol < 0 || statusCol < 0) return@use false
+        check(uriCol >= 0 && statusCol >= 0) { "DownloadManager columns are unavailable" }
         var found = false
         while (c.moveToNext() && !found) {
             val status = c.getInt(statusCol)
