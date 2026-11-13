@@ -36,6 +36,7 @@ import com.app.musicplayer.data.Video
 import com.app.musicplayer.data.VideoRepository
 import com.app.musicplayer.data.toMediaItem
 import com.app.musicplayer.service.MusicService
+import com.app.musicplayer.service.StreamHeaderRegistry
 import com.app.musicplayer.playback.MediaPlayerManager
 import com.app.musicplayer.playback.PlaybackOptions
 import com.app.musicplayer.playback.SleepTimer
@@ -152,6 +153,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         data class PlayNext(val song: Song) : PendingPlaybackAction
         data class AddToQueue(val song: Song) : PendingPlaybackAction
         data class PlayUrl(val url: String) : PendingPlaybackAction
+        data class PlayStream(val url: String, val title: String, val artist: String, val artworkUrl: String?, val headers: Map<String, String>) : PendingPlaybackAction
         data object TogglePlayback : PendingPlaybackAction
     }
 
@@ -242,6 +244,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                         is PendingPlaybackAction.PlayNext -> playNext(action.song)
                         is PendingPlaybackAction.AddToQueue -> addToQueue(action.song)
                         is PendingPlaybackAction.PlayUrl -> playUrl(action.url)
+                        is PendingPlaybackAction.PlayStream -> playStreamNow(action.url, action.title, action.artist, action.artworkUrl, action.headers)
                         PendingPlaybackAction.TogglePlayback -> togglePlay()
                     }
                 }
@@ -543,6 +546,36 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     .setArtist("Network stream")
                     .build()
             )
+            .build()
+        c.setMediaItems(listOf(item))
+        c.prepare()
+        c.play()
+    }
+
+    /** Plays a freshly extracted public audio stream through the existing MediaSession player. */
+    fun playStream(url: String, title: String, artist: String, artworkUrl: String?, headers: Map<String, String>) {
+        val action = PendingPlaybackAction.PlayStream(url, title, artist, artworkUrl, headers)
+        if (controller == null) {
+            pendingPlayback.clear()
+            pendingPlayback.enqueue(action)
+            return
+        }
+        playStreamNow(url, title, artist, artworkUrl, headers)
+    }
+
+    private fun playStreamNow(url: String, title: String, artist: String, artworkUrl: String?, headers: Map<String, String>) {
+        val c = controller ?: return
+        _ui.update { it.copy(playbackError = null) }
+        StreamHeaderRegistry.register(url, headers)
+        val metadata = MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(artist)
+            .apply { if (!artworkUrl.isNullOrBlank()) setArtworkUri(Uri.parse(artworkUrl)) }
+            .build()
+        val item = MediaItem.Builder()
+            .setMediaId(url)
+            .setUri(url)
+            .setMediaMetadata(metadata)
             .build()
         c.setMediaItems(listOf(item))
         c.prepare()
