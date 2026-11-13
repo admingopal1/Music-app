@@ -27,6 +27,23 @@ class DirectMediaUrlValidatorTest {
         assertTrue(DirectMediaUrlValidator.validate("https://example.com/stream.m3u8") is DirectMediaUrlResult.Invalid)
     }
 
+    @Test fun rejectsExtensionOnlyHiddenFileNames() {
+        assertTrue(DirectMediaUrlValidator.validate("https://example.com/.mp4") is DirectMediaUrlResult.Invalid)
+        assertTrue(DirectMediaUrlValidator.validate("https://example.com/.mp3?token=abc") is DirectMediaUrlResult.Invalid)
+    }
+
+    @Test fun acceptsDirectMediaFilesHostedOnRecognizedSocialDomains() {
+        val cases = mapOf(
+            "https://cdn.instagram.com/media/clip.mp4?token=abc" to "clip.mp4",
+            "https://player.vimeo.com/external/123.hd.mp4" to "123.hd.mp4",
+        )
+        cases.forEach { (url, expectedFileName) ->
+            val result = DirectMediaUrlValidator.validate(url)
+            assertTrue("$url should be accepted as a direct media URL", result is DirectMediaUrlResult.Valid)
+            assertEquals(expectedFileName, (result as DirectMediaUrlResult.Valid).fileName)
+        }
+    }
+
     @Test fun identifiesSocialHostsWithoutSubstringFalsePositives() {
         assertEquals("Instagram", (DirectMediaUrlValidator.validate("https://www.instagram.com/p/abc") as DirectMediaUrlResult.Social).platform)
         assertEquals("Facebook", (DirectMediaUrlValidator.validate("https://m.facebook.com/watch/abc") as DirectMediaUrlResult.Social).platform)
@@ -34,8 +51,56 @@ class DirectMediaUrlValidatorTest {
         assertTrue(DirectMediaUrlValidator.validate("https://instagram.com.evil.example/video.mp4") is DirectMediaUrlResult.Valid)
     }
 
+    @Test fun identifiesAdditionalGlobalVideoAndSocialPlatforms() {
+        val cases = mapOf(
+            "https://www.snapchat.com/spotlight/abc" to "Snapchat",
+            "https://www.tiktok.com/@user/video/123" to "TikTok",
+            "https://vimeo.com/123456" to "Vimeo",
+            "https://www.dailymotion.com/video/abc" to "Dailymotion",
+            "https://redd.it/abc123" to "Reddit",
+            "https://pin.it/abc123" to "Pinterest",
+            "https://fb.watch/abc123" to "Facebook",
+        )
+        cases.forEach { (url, expected) ->
+            val result = DirectMediaUrlValidator.validate(url)
+            assertTrue("$url should be identified as a social link", result is DirectMediaUrlResult.Social)
+            assertEquals(expected, (result as DirectMediaUrlResult.Social).platform)
+        }
+    }
+
     @Test fun rejectsEmbeddedCredentialsAndInvalidPorts() {
         assertTrue(DirectMediaUrlValidator.validate("https://user:pass@example.com/video.mp4") is DirectMediaUrlResult.Invalid)
         assertTrue(DirectMediaUrlValidator.validate("https://example.com:99999/video.mp4") is DirectMediaUrlResult.Invalid)
     }
+
+    @Test fun identifiesCommonIndianAndGlobalVideoPlatforms() {
+        val cases = mapOf(
+            "https://youtu.be/abc123" to "YouTube",
+            "https://x.com/user/status/123" to "X",
+            "https://t.me/channel/123" to "Telegram",
+            "https://sharechat.com/video/abc" to "ShareChat",
+            "https://mojapp.in/video/abc" to "Moj",
+            "https://myjosh.in/video/abc" to "Josh",
+            "https://www.chingari.io/video/abc" to "Chingari",
+            "https://www.roposo.com/video/abc" to "Roposo",
+        )
+        cases.forEach { (url, expected) ->
+            val result = DirectMediaUrlValidator.validate(url)
+            assertTrue("$url should be identified as a social link", result is DirectMediaUrlResult.Social)
+            assertEquals(expected, (result as DirectMediaUrlResult.Social).platform)
+        }
+    }
+
+    @Test fun normalizesCaseAndTrailingDotForSocialHosts() {
+        val result = DirectMediaUrlValidator.validate("HTTPS://WWW.INSTAGRAM.COM./p/abc")
+        assertTrue(result is DirectMediaUrlResult.Social)
+        assertEquals("Instagram", (result as DirectMediaUrlResult.Social).platform)
+    }
+
+    @Test fun rejectsMalformedPortAndSocialDomainLookalikes() {
+        assertTrue(DirectMediaUrlValidator.validate("https://example.com:abc/video.mp4") is DirectMediaUrlResult.Invalid)
+        val lookalike = DirectMediaUrlValidator.validate("https://instagram.com.evil.example/reel/abc")
+        assertTrue(lookalike is DirectMediaUrlResult.Invalid)
+    }
+
 }

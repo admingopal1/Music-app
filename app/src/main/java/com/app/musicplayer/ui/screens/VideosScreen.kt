@@ -1,5 +1,6 @@
 package com.app.musicplayer.ui.screens
 
+import com.app.musicplayer.ui.theme.glass
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -67,11 +68,10 @@ fun VideosScreen(vm: PlayerViewModel) {
         else videos.filter { it.title.contains(query, true) || it.folder.contains(query, true) }
     }
 
-    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background)))) {
+    Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
-                .clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.06f))
-                .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp)).padding(5.dp),
+                .glass(RoundedCornerShape(18.dp)).padding(5.dp),
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             VideoTab("My videos", !showDownloads && !showYouTube, Modifier.weight(1f)) { showDownloads = false; showYouTube = false }
@@ -142,9 +142,7 @@ private fun VideoRow(video: Video, onClick: () -> Unit) {
     }
     val accent = MaterialTheme.colorScheme.primary
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-            .background(Color.White.copy(alpha = 0.055f))
-            .border(1.dp, Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
+        Modifier.fillMaxWidth().glass(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

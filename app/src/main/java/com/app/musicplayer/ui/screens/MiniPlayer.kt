@@ -1,5 +1,6 @@
 package com.app.musicplayer.ui.screens
 
+import com.app.musicplayer.ui.theme.glass
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,7 +50,7 @@ fun MiniPlayer(vm: PlayerViewModel, onOpen: () -> Unit) {
 
     Column(
         Modifier.fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.97f))
+            .glass(RoundedCornerShape(26.dp), tint = Color(0xFF120E1F).copy(alpha = 0.45f))
             .clickable(onClick = onOpen),
     ) {
         LinearProgressIndicator(

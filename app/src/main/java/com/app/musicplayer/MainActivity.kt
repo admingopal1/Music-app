@@ -1,5 +1,11 @@
 package com.app.musicplayer
 
+import com.app.musicplayer.ui.theme.glass
+import com.app.musicplayer.ui.theme.GlassBackdrop
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Arrangement
 import android.Manifest
 import android.graphics.Color as AndroidColor
 import android.os.Build
@@ -100,6 +106,7 @@ private data class Tab(val label: String, val icon: ImageVector, val destination
 private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     val accent by vm.accent.collectAsStateWithLifecycle()
     val amoled by vm.amoled.collectAsStateWithLifecycle()
+    val accent2 by vm.accentSecondary.collectAsStateWithLifecycle()
 
     val permissions = rememberPermissions()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -151,18 +158,22 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     }
 
     MusicTheme(accent = accent, amoled = amoled) {
+        GlassBackdrop(accent, accent2) {
         Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = Color.Transparent,
             bottomBar = {
-                Column {
+                Column(
+                    Modifier.navigationBarsPadding().padding(horizontal = 12.dp).padding(bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     if (tab != 2) MiniPlayer(vm) { openTab(2) }
                     Box {
                         NavigationBar(
-                            containerColor = Color(0xFF171329).copy(alpha = 0.98f),
-                            tonalElevation = 10.dp,
-                            // Reserve the Android system navigation area so app
-                            // targets cannot overlap the device Back/gesture region.
-                            windowInsets = androidx.compose.foundation.layout.WindowInsets.navigationBars,
+                            modifier = Modifier.glass(RoundedCornerShape(30.dp), tint = Color(0xFF120E1F).copy(alpha = 0.50f)),
+                            containerColor = Color.Transparent,
+                            tonalElevation = 0.dp,
+                            // The floating bar sits above the system gesture area (see navigationBarsPadding above).
+                            windowInsets = WindowInsets(0.dp),
                         ) {
                             primaryTabs.forEach { item ->
                                 NavigationBarItem(
@@ -195,9 +206,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             },
         ) { inner ->
             Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), Color(0xFF080810)))
-                ).padding(inner)
+                Modifier.fillMaxSize().padding(inner)
             ) {
                 AnimatedContent(
                     targetState = tab,
@@ -216,6 +225,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                     }
                 }
             }
+        }
         }
     }
 }

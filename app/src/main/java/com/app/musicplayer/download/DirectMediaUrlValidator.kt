@@ -9,11 +9,33 @@ sealed interface DirectMediaUrlResult {
     data class Invalid(val message: String) : DirectMediaUrlResult
 }
 
-/** Validates direct media links before handing them to Android DownloadManager. */
+/**
+ * Accepts direct media files and identifies common social/video post URLs.
+ * A post URL is not treated as a media file: platform restrictions are never bypassed.
+ */
 object DirectMediaUrlValidator {
     private val allowedExtensions = setOf(
         "mp4", "webm", "mkv", "mov", "m4v",
         "mp3", "m4a", "aac", "wav", "ogg", "flac",
+    )
+
+    private val socialHosts = linkedMapOf(
+        "Instagram" to setOf("instagram.com"),
+        "Facebook" to setOf("facebook.com", "fb.watch"),
+        "YouTube" to setOf("youtube.com", "youtu.be"),
+        "X" to setOf("x.com", "twitter.com"),
+        "Telegram" to setOf("t.me", "telegram.me", "telegram.org"),
+        "ShareChat" to setOf("sharechat.com"),
+        "Moj" to setOf("mojapp.in"),
+        "Josh" to setOf("myjosh.in", "joshapp.com"),
+        "Chingari" to setOf("chingari.io", "chingari.in"),
+        "Roposo" to setOf("roposo.com"),
+        "Snapchat" to setOf("snapchat.com"),
+        "TikTok" to setOf("tiktok.com"),
+        "Vimeo" to setOf("vimeo.com"),
+        "Dailymotion" to setOf("dailymotion.com", "dai.ly"),
+        "Reddit" to setOf("reddit.com", "redd.it"),
+        "Pinterest" to setOf("pinterest.com", "pin.it"),
     )
 
     fun validate(raw: String): DirectMediaUrlResult {
@@ -34,23 +56,23 @@ object DirectMediaUrlValidator {
             return DirectMediaUrlResult.Invalid("The URL contains an invalid network port.")
         }
 
-        if (host == "instagram.com" || host.endsWith(".instagram.com")) {
-            return DirectMediaUrlResult.Social("Instagram")
-        }
-        if (host == "facebook.com" || host.endsWith(".facebook.com") ||
-            host == "fb.watch" || host.endsWith(".fb.watch")
-        ) {
-            return DirectMediaUrlResult.Social("Facebook")
-        }
+        val platform = socialHosts.entries.firstOrNull { (_, domains) ->
+            domains.any { domain -> host == domain || host.endsWith(".$domain") }
+        }?.key
 
+        // A recognized platform may also host an authorized direct media file.
+        // Prefer a supported file extension, then fall back to social-page detection.
         val fileName = uri.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-            ?: return DirectMediaUrlResult.Invalid("The URL does not point to a media file.")
-        val extension = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
-        if (extension !in allowedExtensions) {
-            return DirectMediaUrlResult.Invalid(
-                "Use a direct MP4, WebM, MOV or supported audio-file URL. Web pages and streaming playlists are not direct files."
-            )
+        val extension = fileName?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
+        if (fileName != null && fileName.substringBeforeLast('.').isNotBlank() && extension in allowedExtensions) {
+            return DirectMediaUrlResult.Valid(value, fileName)
         }
-        return DirectMediaUrlResult.Valid(value, fileName)
+        if (platform != null) return DirectMediaUrlResult.Social(platform)
+        if (fileName == null) {
+            return DirectMediaUrlResult.Invalid("The URL does not point to a media file.")
+        }
+        return DirectMediaUrlResult.Invalid(
+            "This link is not a direct media file. Use a direct MP4, WebM, MOV or supported audio-file URL."
+        )
     }
 }

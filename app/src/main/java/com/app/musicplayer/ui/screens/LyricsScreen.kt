@@ -1,5 +1,7 @@
 package com.app.musicplayer.ui.screens
 
+import com.app.musicplayer.ui.theme.glassBackdrop
+import com.app.musicplayer.ui.theme.glass
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -88,12 +90,11 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background))), color = MaterialTheme.colorScheme.background) {
+        Surface(Modifier.fillMaxSize().glassBackdrop(accent, Color(0xFF542C72)), color = Color.Transparent) {
             Column(Modifier.fillMaxSize().statusBarsPadding()) {
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)
-                        .background(Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp))
+                        .glass(RoundedCornerShape(18.dp))
                         .padding(horizontal = 4.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -124,8 +125,7 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                             "No lyrics found for this song.\n\nLoad an .lrc/.txt file for it, or choose a folder with your .lrc files in Settings (names should match the songs).",
                             textAlign = TextAlign.Center,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth().background(Color.White.copy(alpha = 0.055f), RoundedCornerShape(22.dp))
-                                .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(22.dp)).padding(22.dp),
+                            modifier = Modifier.fillMaxWidth().glass(RoundedCornerShape(22.dp)).padding(22.dp),
                         )
                         Button(onClick = { picker.launch(arrayOf("*/*")) }, modifier = Modifier.padding(top = 20.dp)) {
                             Text("Load .lrc/.txt for this song")

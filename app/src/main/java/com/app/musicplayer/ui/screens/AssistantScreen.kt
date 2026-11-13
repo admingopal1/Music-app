@@ -1,5 +1,6 @@
 package com.app.musicplayer.ui.screens
 
+import com.app.musicplayer.ui.theme.glass
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -119,9 +120,7 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     }
 
     Column(
-        Modifier.fillMaxSize().background(
-            Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background))
-        ).padding(horizontal = 18.dp, vertical = 16.dp),
+        Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -132,7 +131,7 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             }
         }
         Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2041).copy(alpha = 0.92f)),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.10f)),
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(20.dp)),
         ) {
@@ -157,7 +156,7 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             }
         }
         Card(
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF302247).copy(alpha = 0.96f)),
+            colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.12f)),
             shape = RoundedCornerShape(22.dp),
             modifier = Modifier.border(1.dp, Color(0xFFE3A7FF).copy(alpha = 0.16f), RoundedCornerShape(22.dp)),
         ) {
@@ -195,9 +194,7 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(selected, key = { it.id }) { song ->
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                            .background(Color.White.copy(0.065f))
-                            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(16.dp))
+                        Modifier.fillMaxWidth().glass(RoundedCornerShape(16.dp))
                             .clickable { vm.playSongs(selected, selected.indexOf(song)); onOpenPlayer() }.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

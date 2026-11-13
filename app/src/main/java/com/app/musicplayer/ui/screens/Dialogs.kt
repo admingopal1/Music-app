@@ -1,5 +1,8 @@
 package com.app.musicplayer.ui.screens
 
+import com.google.firebase.auth.FirebaseAuth
+import com.app.musicplayer.ui.theme.GlassDialogShape
+import com.app.musicplayer.ui.theme.GlassDialogColor
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -77,11 +80,14 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     }
 
     AlertDialog(
+        containerColor = GlassDialogColor,
+        shape = GlassDialogShape,
         onDismissRequest = onDismiss,
         title = { Text("Settings") },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                AccountRow()
                 SettingSwitch("AMOLED black theme", amoled, vm::setAmoled)
                 SettingSwitch("Colours from album art", dynamic, vm::setDynamicColors)
                 SettingSwitch("Skip silence", skip, vm::setSkipSilence)
@@ -156,6 +162,8 @@ fun SettingsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
 private fun EnhancerDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     val s by vm.enhancer.collectAsStateWithLifecycle()
     AlertDialog(
+        containerColor = GlassDialogColor,
+        shape = GlassDialogShape,
         onDismissRequest = onDismiss,
         title = { Text("Sound enhancer") },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
@@ -228,6 +236,8 @@ fun StreamDialog(onPlay: (String) -> Unit, onDismiss: () -> Unit) {
     var url by remember { mutableStateOf("") }
     val valid = url.trim().startsWith("http")
     AlertDialog(
+        containerColor = GlassDialogColor,
+        shape = GlassDialogShape,
         onDismissRequest = onDismiss,
         title = { Text("Play network stream") },
         text = {
@@ -259,6 +269,8 @@ fun QueueDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
 
     AlertDialog(
+        containerColor = GlassDialogColor,
+        shape = GlassDialogShape,
         onDismissRequest = onDismiss,
         title = { Text("Queue (${items.size})") },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
@@ -304,4 +316,23 @@ fun QueueDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
             }
         },
     )
+}
+
+/** Shows the signed-in account with a sign-out button (signing out returns to the login screen). */
+@Composable
+private fun AccountRow() {
+    val user = FirebaseAuth.getInstance().currentUser
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Account", style = MaterialTheme.typography.labelLarge)
+            Text(
+                user?.email ?: "Signed in",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        TextButton(onClick = { FirebaseAuth.getInstance().signOut() }) { Text("Sign out") }
+    }
 }
