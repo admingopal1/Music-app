@@ -88,6 +88,7 @@ fun DownloadsHubScreen() {
     var url by remember { mutableStateOf("") }
     var rows by remember { mutableStateOf(emptyList<DownloadRow>()) }
     var loading by remember { mutableStateOf(false) }
+    var refreshQueued by remember { mutableStateOf(false) }
     var refreshError by remember { mutableStateOf<String?>(null) }
     var platformHint by remember { mutableStateOf<String?>(null) }
     var selectedFilter by remember { mutableStateOf("All") }
@@ -130,12 +131,18 @@ fun DownloadsHubScreen() {
     }
 
     fun refresh() {
-        // Ignore repeated taps while a manual refresh is already in progress.
-        if (loading) return
+        // Keep one follow-up refresh when a new request arrives during an active query.
+        if (loading) {
+            refreshQueued = true
+            return
+        }
         loading = true
         scope.launch {
             try {
-                refreshRows()
+                do {
+                    refreshQueued = false
+                    refreshRows()
+                } while (refreshQueued)
             } finally {
                 loading = false
             }
