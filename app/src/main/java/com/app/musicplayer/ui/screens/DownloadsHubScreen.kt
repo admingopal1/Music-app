@@ -181,7 +181,10 @@ fun DownloadsHubScreen() {
         "Failed" -> rows.filter { it.status == "Failed" }
         else -> rows
     }
-    val visibleRows = filteredRows.filter { it.title.contains(searchQuery.trim(), ignoreCase = true) }
+    val visibleRows = filteredRows.filter { row ->
+        val query = searchQuery.trim()
+        query.isBlank() || row.title.contains(query, ignoreCase = true) || row.sourceUri.contains(query, ignoreCase = true)
+    }
     val hasActiveDownloads = activeCount > 0
     androidx.compose.runtime.LaunchedEffect(hasActiveDownloads) {
         while (hasActiveDownloads) {
@@ -289,7 +292,7 @@ fun DownloadsHubScreen() {
                     onValueChange = { searchQuery = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    placeholder = { Text("Search downloads by file name") },
+                    placeholder = { Text("Search by file name or source link") },
                     shape = RoundedCornerShape(14.dp),
                 )
                 Text("$activeCount active  •  $completedCount completed  •  $failedCount failed",
