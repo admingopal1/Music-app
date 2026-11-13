@@ -129,7 +129,7 @@ private fun AuthScreen(auth: FirebaseAuth) {
                 12501 -> "Google sign-in was cancelled (status 12501)."
                 10 -> "Google sign-in configuration error (status 10). Check SHA-1/SHA-256 and Web client ID in Firebase."
                 7 -> "Google sign-in network error (status 7). Check your internet connection."
-                else -> "Google sign-in failed (status $statusCode): ${error.status.message ?: error.localizedMessage ?: "Unknown Google Play services error"}"
+                else -> "Google sign-in failed (status $statusCode): ${error.localizedMessage ?: "Unknown Google Play services error"}"
             }
         } catch (error: Exception) {
             busy = false
