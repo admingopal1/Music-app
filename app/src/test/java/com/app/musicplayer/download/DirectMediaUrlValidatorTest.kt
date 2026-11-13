@@ -28,9 +28,15 @@ class DirectMediaUrlValidatorTest {
     }
 
     @Test fun acceptsDirectMediaFilesHostedOnRecognizedSocialDomains() {
-        val result = DirectMediaUrlValidator.validate("https://cdn.instagram.com/media/clip.mp4?token=abc")
-        assertTrue(result is DirectMediaUrlResult.Valid)
-        assertEquals("clip.mp4", (result as DirectMediaUrlResult.Valid).fileName)
+        val cases = mapOf(
+            "https://cdn.instagram.com/media/clip.mp4?token=abc" to "clip.mp4",
+            "https://player.vimeo.com/external/123.hd.mp4" to "123.hd.mp4",
+        )
+        cases.forEach { (url, expectedFileName) ->
+            val result = DirectMediaUrlValidator.validate(url)
+            assertTrue("$url should be accepted as a direct media URL", result is DirectMediaUrlResult.Valid)
+            assertEquals(expectedFileName, (result as DirectMediaUrlResult.Valid).fileName)
+        }
     }
 
     @Test fun identifiesSocialHostsWithoutSubstringFalsePositives() {
