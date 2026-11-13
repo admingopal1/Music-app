@@ -79,6 +79,7 @@ fun DownloadsHubScreen() {
     var rows by remember { mutableStateOf(emptyList<DownloadRow>()) }
     var loading by remember { mutableStateOf(false) }
     var platformHint by remember { mutableStateOf<String?>(null) }
+    var selectedFilter by remember { mutableStateOf("All") }
 
     fun refresh() {
         scope.launch {
@@ -139,7 +140,16 @@ fun DownloadsHubScreen() {
     }
 
     androidx.compose.runtime.LaunchedEffect(Unit) { refresh() }
-    val hasActiveDownloads = rows.any { it.status == "Waiting" || it.status == "Downloading" || it.status == "Paused" }
+    val activeCount = rows.count { it.status == "Waiting" || it.status == "Downloading" || it.status == "Paused" }
+    val completedCount = rows.count { it.status == "Completed" }
+    val failedCount = rows.count { it.status == "Failed" }
+    val visibleRows = when (selectedFilter) {
+        "Active" -> rows.filter { it.status == "Waiting" || it.status == "Downloading" || it.status == "Paused" }
+        "Completed" -> rows.filter { it.status == "Completed" }
+        "Failed" -> rows.filter { it.status == "Failed" }
+        else -> rows
+    }
+    val hasActiveDownloads = activeCount > 0
     androidx.compose.runtime.LaunchedEffect(hasActiveDownloads) {
         while (hasActiveDownloads) {
             delay(1_500)
@@ -239,9 +249,27 @@ fun DownloadsHubScreen() {
                 }
             }
         }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("$activeCount active  •  $completedCount completed  •  $failedCount failed",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("All", "Active", "Completed", "Failed").forEach { filter ->
+                        TextButton(onClick = { selectedFilter = filter }) {
+                            Text(
+                                filter,
+                                fontWeight = if (selectedFilter == filter) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedFilter == filter) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
         if (loading) {
             item { CircularProgressIndicator() }
-        } else if (rows.isEmpty()) {
+        } else if (visibleRows.isEmpty()) {
             item {
                 Column(
                     Modifier.fillMaxWidth().padding(vertical = 28.dp)
@@ -252,11 +280,11 @@ fun DownloadsHubScreen() {
                 ) {
                     Icon(Icons.Rounded.VideoLibrary, contentDescription = null, modifier = Modifier.padding(4.dp), tint = MaterialTheme.colorScheme.primary)
                     Text("No downloads yet", fontWeight = FontWeight.SemiBold)
-                    Text("Your completed and active downloads will appear here.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (selectedFilter == "All") "Your completed and active downloads will appear here." else "No $selectedFilter downloads.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
-            items(rows, key = { it.id }) { item ->
+            items(visibleRows, key = { it.id }) { item ->
                 Card(
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.09f)),
@@ -279,7 +307,7 @@ fun DownloadsHubScreen() {
                                 modifier = Modifier.fillMaxWidth(),
                             )
                             Text(
-                                "${formatBytes(item.downloaded)} / ${formatBytes(item.total)}",
+                                "${(progress * 100).toInt()}%  •  ${formatBytes(item.downloaded)} / ${formatBytes(item.total)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
