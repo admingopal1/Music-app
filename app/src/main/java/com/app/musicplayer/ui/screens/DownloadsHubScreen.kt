@@ -235,7 +235,7 @@ fun DownloadsHubScreen() {
                 TextButton(onClick = {
                     runCatching {
                         val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                        manager.remove(download.id)
+                        check(manager.remove(download.id) > 0) { "Download entry was not found; refresh the list and try again." }
                         pendingDelete = null
                         refresh()
                     }.onFailure {
@@ -545,7 +545,7 @@ fun DownloadsHubScreen() {
                                 } else {
                                     runCatching {
                                         val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                        manager.remove(item.id)
+                                        check(manager.remove(item.id) > 0) { "Download entry was not found; refresh the list and try again." }
                                         refresh()
                                     }.onFailure {
                                         Toast.makeText(context, "Could not cancel or remove download: ${it.message}", Toast.LENGTH_LONG).show()
