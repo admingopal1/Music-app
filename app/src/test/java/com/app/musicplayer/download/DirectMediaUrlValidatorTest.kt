@@ -90,4 +90,17 @@ class DirectMediaUrlValidatorTest {
             assertEquals(expected, (result as DirectMediaUrlResult.Social).platform)
         }
     }
+
+    @Test fun normalizesCaseAndTrailingDotForSocialHosts() {
+        val result = DirectMediaUrlValidator.validate("HTTPS://WWW.INSTAGRAM.COM./p/abc")
+        assertTrue(result is DirectMediaUrlResult.Social)
+        assertEquals("Instagram", (result as DirectMediaUrlResult.Social).platform)
+    }
+
+    @Test fun rejectsMalformedPortAndSocialDomainLookalikes() {
+        assertTrue(DirectMediaUrlValidator.validate("https://example.com:abc/video.mp4") is DirectMediaUrlResult.Invalid)
+        val lookalike = DirectMediaUrlValidator.validate("https://instagram.com.evil.example/reel/abc")
+        assertTrue(lookalike is DirectMediaUrlResult.Invalid)
+    }
+
 }
