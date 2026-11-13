@@ -80,6 +80,7 @@ fun DownloadsHubScreen() {
     var loading by remember { mutableStateOf(false) }
     var platformHint by remember { mutableStateOf<String?>(null) }
     var selectedFilter by remember { mutableStateOf("All") }
+    var searchQuery by remember { mutableStateOf("") }
 
     fun refresh() {
         scope.launch {
@@ -143,12 +144,13 @@ fun DownloadsHubScreen() {
     val activeCount = rows.count { it.status == "Waiting" || it.status == "Downloading" || it.status == "Paused" }
     val completedCount = rows.count { it.status == "Completed" }
     val failedCount = rows.count { it.status == "Failed" }
-    val visibleRows = when (selectedFilter) {
+    val filteredRows = when (selectedFilter) {
         "Active" -> rows.filter { it.status == "Waiting" || it.status == "Downloading" || it.status == "Paused" }
         "Completed" -> rows.filter { it.status == "Completed" }
         "Failed" -> rows.filter { it.status == "Failed" }
         else -> rows
     }
+    val visibleRows = filteredRows.filter { it.title.contains(searchQuery.trim(), ignoreCase = true) }
     val hasActiveDownloads = activeCount > 0
     androidx.compose.runtime.LaunchedEffect(hasActiveDownloads) {
         while (hasActiveDownloads) {
@@ -251,6 +253,14 @@ fun DownloadsHubScreen() {
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("Search downloads by file name") },
+                    shape = RoundedCornerShape(14.dp),
+                )
                 Text("$activeCount active  •  $completedCount completed  •  $failedCount failed",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -280,7 +290,14 @@ fun DownloadsHubScreen() {
                 ) {
                     Icon(Icons.Rounded.VideoLibrary, contentDescription = null, modifier = Modifier.padding(4.dp), tint = MaterialTheme.colorScheme.primary)
                     Text("No downloads yet", fontWeight = FontWeight.SemiBold)
-                    Text(if (selectedFilter == "All") "Your completed and active downloads will appear here." else "No $selectedFilter downloads.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        when {
+                            searchQuery.isNotBlank() -> "No downloads match \"$searchQuery\"."
+                            selectedFilter == "All" -> "Your completed and active downloads will appear here."
+                            else -> "No $selectedFilter downloads."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         } else {
