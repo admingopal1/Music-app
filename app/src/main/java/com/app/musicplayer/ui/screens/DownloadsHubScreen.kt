@@ -620,7 +620,7 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
     val cursor = manager.query(DownloadManager.Query().setFilterByStatus(
         DownloadManager.STATUS_PENDING or DownloadManager.STATUS_RUNNING or DownloadManager.STATUS_PAUSED or
             DownloadManager.STATUS_SUCCESSFUL or DownloadManager.STATUS_FAILED
-    )) ?: return emptyList()
+    )) ?: throw IllegalStateException("Download history is temporarily unavailable")
     return cursor.use { c ->
         val idCol = c.getColumnIndex(DownloadManager.COLUMN_ID)
         val titleCol = c.getColumnIndex(DownloadManager.COLUMN_TITLE)
@@ -630,7 +630,9 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
         val uriCol = c.getColumnIndex(DownloadManager.COLUMN_URI)
         val reasonCol = c.getColumnIndex(DownloadManager.COLUMN_REASON)
         val modifiedCol = c.getColumnIndex(DownloadManager.COLUMN_LAST_MODIFIED_TIMESTAMP)
-        if (idCol < 0 || titleCol < 0 || statusCol < 0) return@use emptyList()
+        check(idCol >= 0 && titleCol >= 0 && statusCol >= 0) {
+            "Required download history columns are unavailable"
+        }
         val out = mutableListOf<DownloadRow>()
         while (c.moveToNext()) {
             val status = when (c.getInt(statusCol)) {
