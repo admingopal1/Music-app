@@ -197,7 +197,8 @@ fun DownloadsHubScreen() {
                 .setAllowedOverRoaming(false)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "MusicPlayer/$safeName")
             val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            manager.enqueue(request)
+            val downloadId = manager.enqueue(request)
+            check(downloadId > 0L) { "Android Download Manager did not accept the download request." }
             platformHint = "Download added. Android will show progress and a notification."
             url = ""
             refresh()
@@ -521,7 +522,8 @@ fun DownloadsHubScreen() {
                                                 .setAllowedOverRoaming(false)
                                                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "MusicPlayer/$retryName")
                                             val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                            manager.enqueue(request)
+                                            val downloadId = manager.enqueue(request)
+                                            check(downloadId > 0L) { "Android Download Manager did not accept the retry request." }
                                             refresh()
                                         }.onFailure {
                                             Toast.makeText(context, "Retry failed: ${it.message}", Toast.LENGTH_LONG).show()
