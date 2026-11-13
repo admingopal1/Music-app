@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "290611399615-prkcbv2n56jlf0jvc5pp87tp55es1n7p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.app.musicplayer",
+            "certificate_hash": "382d09eb8e5bf5d2944fb355f682529a435ed13b"
+          }
+        },
+        {
           "client_id": "290611399615-a2r7rfh25ethufdiufodao8escua5e94.apps.googleusercontent.com",
           "client_type": 3
         }
