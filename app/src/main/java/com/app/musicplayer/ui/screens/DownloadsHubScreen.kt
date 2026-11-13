@@ -104,7 +104,7 @@ fun DownloadsHubScreen() {
                 return
             }
             is DirectMediaUrlResult.Social -> {
-                platformHint = "${validation.platform} post link detected. This is a post page, not a direct media file. Open it in the official site/app. Downloads work when the creator provides an accessible direct media URL or you own and export the file. Private/restricted posts are not bypassed."
+                platformHint = "${validation.platform} link detected. This is a webpage, not a direct media file. Open it in the official app/site. If the creator or platform provides an authorized direct download, paste that media-file link here. Private, login-protected, DRM-protected or otherwise restricted videos cannot be downloaded by this app."
                 Toast.makeText(context, "Social post link detected — see the note below", Toast.LENGTH_LONG).show()
                 return
             }
@@ -155,7 +155,7 @@ fun DownloadsHubScreen() {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("Downloads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("Save direct video and audio files to your phone", color = Color.White.copy(alpha = 0.68f))
+                Text("Direct media downloads + social link detection", color = Color.White.copy(alpha = 0.68f))
             }
         }
         item {
@@ -196,7 +196,7 @@ fun DownloadsHubScreen() {
                         }
                     }
                     Text(
-                        "Supported direct files: MP4, WebM, MKV, MOV, M4V and common audio formats. Downloads are saved in Downloads/MusicPlayer.",
+                        "Direct MP4, WebM, MKV, MOV, M4V and audio files are supported. Instagram, Facebook, YouTube, X, Telegram, ShareChat, Moj, Josh and other recognized social links are identified and can be opened in their official app. Social post pages are not downloaded unless an authorized direct media URL is available. Saved files go to Downloads/MusicPlayer.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -212,11 +212,11 @@ fun DownloadsHubScreen() {
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(platformHint!!, style = MaterialTheme.typography.bodyMedium)
-                        if (url.contains("instagram.com", true) || url.contains("facebook.com", true) || url.contains("fb.watch", true)) {
+                        if (url.startsWith("https://", true) || url.startsWith("http://", true)) {
                             OutlinedButton(onClick = { openLink(url) }) {
                                 Icon(Icons.Rounded.OpenInBrowser, contentDescription = null)
                                 Spacer(Modifier.width(6.dp))
-                                Text("Open social post")
+                                Text("Open link")
                             }
                         }
                     }
