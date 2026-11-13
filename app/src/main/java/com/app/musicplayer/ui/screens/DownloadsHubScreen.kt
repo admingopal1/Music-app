@@ -69,6 +69,7 @@ private data class DownloadRow(
     val total: Long,
     val sourceUri: String,
     val failureReason: String,
+    val lastModified: Long,
 )
 
 private data class DownloadSample(val bytes: Long, val timeMillis: Long)
@@ -85,6 +86,7 @@ fun DownloadsHubScreen() {
     var platformHint by remember { mutableStateOf<String?>(null) }
     var selectedFilter by remember { mutableStateOf("All") }
     var searchQuery by remember { mutableStateOf("") }
+    var selectedSort by remember { mutableStateOf("Newest") }
     var downloadSamples by remember { mutableStateOf(emptyMap<Long, DownloadSample>()) }
     var downloadSpeeds by remember { mutableStateOf(emptyMap<Long, DownloadSpeed>()) }
 
@@ -184,6 +186,11 @@ fun DownloadsHubScreen() {
     val visibleRows = filteredRows.filter { row ->
         val query = searchQuery.trim()
         query.isBlank() || row.title.contains(query, ignoreCase = true) || row.sourceUri.contains(query, ignoreCase = true)
+    }
+    val sortedVisibleRows = when (selectedSort) {
+        "Oldest" -> visibleRows.sortedBy { it.lastModified }
+        "Name" -> visibleRows.sortedBy { it.title.lowercase() }
+        else -> visibleRows.sortedByDescending { it.lastModified }
     }
     val hasActiveDownloads = activeCount > 0
     androidx.compose.runtime.LaunchedEffect(hasActiveDownloads) {
@@ -309,6 +316,18 @@ fun DownloadsHubScreen() {
                         }
                     }
                 }
+                Text("Sort by", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("Newest", "Oldest", "Name").forEach { sort ->
+                        TextButton(onClick = { selectedSort = sort }) {
+                            Text(
+                                sort,
+                                fontWeight = if (selectedSort == sort) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedSort == sort) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
             }
         }
         if (loading) {
@@ -335,7 +354,7 @@ fun DownloadsHubScreen() {
                 }
             }
         } else {
-            items(visibleRows, key = { it.id }) { item ->
+            items(sortedVisibleRows, key = { it.id }) { item ->
                 Card(
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.09f)),
@@ -506,6 +525,7 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
         val totalCol = c.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
         val uriCol = c.getColumnIndex(DownloadManager.COLUMN_URI)
         val reasonCol = c.getColumnIndex(DownloadManager.COLUMN_REASON)
+        val modifiedCol = c.getColumnIndex(DownloadManager.COLUMN_LAST_MODIFIED_TIMESTAMP)
         if (idCol < 0 || titleCol < 0 || statusCol < 0) return@use emptyList()
         val out = mutableListOf<DownloadRow>()
         while (c.moveToNext()) {
@@ -536,7 +556,7 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
             } else ""
             val downloaded = if (bytesCol >= 0) c.getLong(bytesCol).coerceAtLeast(0L) else 0L
             val total = if (totalCol >= 0) c.getLong(totalCol).coerceAtLeast(0L) else 0L
-            out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, downloaded, total, if (uriCol >= 0) c.getString(uriCol).orEmpty() else "", failureReason)
+            out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, downloaded, total, if (uriCol >= 0) c.getString(uriCol).orEmpty() else "", failureReason, if (modifiedCol >= 0) c.getLong(modifiedCol) else 0L)
         }
         out.sortedByDescending { it.id }.take(30)
     }
