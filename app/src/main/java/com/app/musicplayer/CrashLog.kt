@@ -1,5 +1,6 @@
 package com.app.musicplayer
 
+import com.app.musicplayer.download.SocialDownloader
 import android.app.Application
 import android.content.Context
 import android.content.Intent
@@ -39,6 +40,7 @@ class MusicApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        SocialDownloader.initEngine(this)
     }
 }
 
