@@ -3,7 +3,7 @@ package com.app.musicplayer.download
 import android.content.Context
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
-import com.yausername.youtubedl_android.mapper.VideoInfo
+import org.json.JSONObject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -69,21 +69,37 @@ object AudioStreamExtractor {
         }
 
         onStage("Preparing background playback…")
-        val info: VideoInfo = try {
-            YoutubeDL.objectMapper.readValue(response.out, VideoInfo::class.java)
+        val info = try {
+            JSONObject(response.out)
         } catch (error: Exception) {
             throw IllegalStateException("Could not read audio information from this public link.", error)
         }
 
-        val streamUrl = info.url?.takeIf { it.startsWith("https://") || it.startsWith("http://") }
-            ?: throw IllegalStateException("This link did not provide a playable audio stream.")
+        val streamUrl = info.optString("url").takeIf {
+            it.startsWith("https://") || it.startsWith("http://")
+        } ?: throw IllegalStateException("This link did not provide a playable audio stream.")
+        val headerJson = info.optJSONObject("http_headers")
+        val headers = buildMap {
+            if (headerJson != null) {
+                val keys = headerJson.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val value = headerJson.optString(key)
+                    if (key.isNotBlank() && value.isNotBlank()) put(key, value)
+                }
+            }
+        }
+        val thumbnail = info.optString("thumbnail").takeIf {
+            it.startsWith("https://") || it.startsWith("http://")
+        }
         ExtractedAudioStream(
             url = streamUrl,
-            title = info.title?.takeIf { it.isNotBlank() } ?: "Online audio",
-            artist = info.uploader?.takeIf { it.isNotBlank() } ?: info.extractor ?: "Online stream",
-            durationSeconds = info.duration.coerceAtLeast(0),
-            thumbnailUrl = info.thumbnail?.takeIf { it.startsWith("https://") || it.startsWith("http://") },
-            httpHeaders = info.httpHeaders.orEmpty().filterKeys { it.isNotBlank() },
+            title = info.optString("title").takeIf { it.isNotBlank() } ?: "Online audio",
+            artist = info.optString("uploader").takeIf { it.isNotBlank() }
+                ?: info.optString("extractor").takeIf { it.isNotBlank() } ?: "Online stream",
+            durationSeconds = info.optInt("duration", 0).coerceAtLeast(0),
+            thumbnailUrl = thumbnail,
+            httpHeaders = headers,
         )
     }
 }
