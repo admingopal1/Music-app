@@ -1,5 +1,7 @@
 package com.app.musicplayer.ui.screens
 
+import com.app.musicplayer.ui.theme.glassFieldColors
+import com.app.musicplayer.ui.theme.glass
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -118,7 +120,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     }
     val inGroupMode = mode in 1..3
 
-    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background)))) {
+    Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(start = 20.dp, top = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -152,7 +154,7 @@ fun LibraryScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             value = query, onValueChange = { query = it },
             placeholder = { Text("Search songs, artists, albums") },
             leadingIcon = { Icon(Icons.Rounded.Search, null) },
-            singleLine = true, shape = RoundedCornerShape(20.dp),
+            singleLine = true, shape = RoundedCornerShape(20.dp), colors = glassFieldColors(),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         )
         Row(
@@ -319,9 +321,7 @@ private fun GroupRow(title: String, subtitle: String, count: Int, onClick: () ->
     val accent = MaterialTheme.colorScheme.primary
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color.White.copy(alpha = 0.055f))
-            .border(1.dp, Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
+            .glass(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -353,9 +353,7 @@ private fun SongRow(
     val accent = MaterialTheme.colorScheme.primary
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(if (current) accent.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.055f))
-            .border(1.dp, if (current) accent.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
+            .glass(RoundedCornerShape(18.dp), tint = if (current) accent.copy(alpha = 0.24f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,

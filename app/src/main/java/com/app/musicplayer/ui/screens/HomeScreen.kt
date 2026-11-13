@@ -1,5 +1,6 @@
 package com.app.musicplayer.ui.screens
 
+import com.app.musicplayer.ui.theme.glassFieldColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -91,11 +92,7 @@ fun HomeScreen(
     }
     val accent = MaterialTheme.colorScheme.primary
 
-    Box(Modifier.fillMaxSize().background(
-        Brush.verticalGradient(
-            listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background)
-        )
-    )) {
+    Box(Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 28.dp),
@@ -124,6 +121,7 @@ fun HomeScreen(
                     leadingIcon = { Icon(Icons.Rounded.Search, null) },
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
+                    colors = glassFieldColors(),
                 )
             }
             item {

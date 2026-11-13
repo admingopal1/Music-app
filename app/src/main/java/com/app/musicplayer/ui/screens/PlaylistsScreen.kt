@@ -1,5 +1,8 @@
 package com.app.musicplayer.ui.screens
 
+import com.app.musicplayer.ui.theme.GlassDialogShape
+import com.app.musicplayer.ui.theme.GlassDialogColor
+import com.app.musicplayer.ui.theme.glass
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,7 +52,7 @@ fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     var showCreate by remember { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
 
-    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background)))) {
+    Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Your Collections", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
@@ -63,8 +66,7 @@ fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
 
         if (lists.isEmpty()) {
             Column(
-                Modifier.fillMaxWidth().padding(24.dp).background(Color.White.copy(alpha = 0.06f), RoundedCornerShape(24.dp))
-                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp)).padding(24.dp),
+                Modifier.fillMaxWidth().padding(24.dp).glass(RoundedCornerShape(24.dp)).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -129,6 +131,8 @@ fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     if (showCreate) {
         var name by remember { mutableStateOf("") }
         AlertDialog(
+        containerColor = GlassDialogColor,
+        shape = GlassDialogShape,
             onDismissRequest = { showCreate = false },
             title = { Text("New playlist") },
             text = {

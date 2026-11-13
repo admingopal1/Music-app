@@ -58,11 +58,11 @@ fun YouTubeHubScreen() {
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), Color(0xFF090912))))) {
+    Column(Modifier.fillMaxSize()) {
         Surface(
-            color = Color(0xFF211936).copy(alpha = 0.98f),
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp,
+            color = Color.White.copy(alpha = 0.10f),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
             shape = RoundedCornerShape(bottomStart = 22.dp, bottomEnd = 22.dp),
         ) {
             Column(

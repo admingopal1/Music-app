@@ -1,5 +1,6 @@
 package com.app.musicplayer.ui.screens
 
+import com.app.musicplayer.ui.theme.glass
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
@@ -103,13 +104,8 @@ import com.app.musicplayer.audio.ReplayGain
 /** Frosted panel: translucent gradient + hairline border, sitting on top of the blurred album-art backdrop. */
 @Composable
 fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(28.dp)
     Column(
-        modifier
-            .clip(shape)
-            .background(Brush.verticalGradient(listOf(Color.White.copy(0.14f), Color.White.copy(0.05f))))
-            .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(0.35f), Color.White.copy(0.05f))), shape)
-            .padding(16.dp),
+        modifier.glass(RoundedCornerShape(28.dp)).padding(16.dp),
         content = content,
     )
 }
@@ -140,7 +136,7 @@ fun PlayerScreen(vm: PlayerViewModel) {
                     listOf(
                         accent.copy(alpha = 0.24f),
                         accentSecondary.copy(alpha = 0.16f),
-                        MaterialTheme.colorScheme.background.copy(alpha = 0.94f),
+                        MaterialTheme.colorScheme.background.copy(alpha = 0.55f),
                     )
                 )
             )

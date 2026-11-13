@@ -148,7 +148,7 @@ fun DownloadsHubScreen() {
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background))),
+        modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -206,7 +206,7 @@ fun DownloadsHubScreen() {
         if (platformHint != null) {
             item {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF38294F)),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.12f)),
                     shape = RoundedCornerShape(18.dp),
                     modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(18.dp)),
                 ) {
@@ -259,7 +259,7 @@ fun DownloadsHubScreen() {
             items(rows, key = { it.id }) { item ->
                 Card(
                     shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF29203F).copy(alpha = 0.9f)),
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.09f)),
                     modifier = Modifier.fillMaxWidth().border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp)),
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

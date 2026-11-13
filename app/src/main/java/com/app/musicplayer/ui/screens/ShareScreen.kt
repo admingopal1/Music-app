@@ -1,5 +1,8 @@
 package com.app.musicplayer.ui.screens
 
+import com.app.musicplayer.ui.theme.GlassDialogShape
+import com.app.musicplayer.ui.theme.GlassDialogColor
+import com.app.musicplayer.ui.theme.glass
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -168,7 +171,7 @@ fun ShareScreen(vm: PlayerViewModel) {
     val accent = MaterialTheme.colorScheme.primary
 
     LazyColumn(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), MaterialTheme.colorScheme.background))),
+        Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -423,8 +426,7 @@ private fun CategoryChip(icon: ImageVector, label: String, onClick: () -> Unit) 
 private fun ToolTile(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
     Column(
-        modifier.clip(RoundedCornerShape(18.dp)).background(Color(0xFF2A2041).copy(alpha = 0.9f))
-            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(18.dp))
+        modifier.glass(RoundedCornerShape(18.dp))
             .clickable(onClick = onClick).padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -437,9 +439,7 @@ private fun ToolTile(icon: ImageVector, label: String, modifier: Modifier, onCli
 @Composable
 private fun ShareCard(content: @Composable ColumnScope.() -> Unit) {
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-            .background(Color(0xFF29203F).copy(alpha = 0.92f))
-            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(22.dp))
+        Modifier.fillMaxWidth().glass(RoundedCornerShape(22.dp))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
         content = content,
@@ -646,6 +646,8 @@ private fun PinDialog(
 ) {
     var pin by remember { mutableStateOf("") }
     AlertDialog(
+        containerColor = GlassDialogColor,
+        shape = GlassDialogShape,
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
@@ -685,6 +687,8 @@ private fun ManualDialog(onDismiss: () -> Unit, onConnect: (String, Int, String)
     val host = address.substringBefore(':').trim()
     val port = address.substringAfter(':', "8765").trim().toIntOrNull() ?: 8765
     AlertDialog(
+        containerColor = GlassDialogColor,
+        shape = GlassDialogShape,
         onDismissRequest = onDismiss,
         title = { Text("Enter code manually") },
         text = {
