@@ -520,17 +520,20 @@ fun DownloadsHubScreen() {
                             }
                             if (item.status == "Completed") {
                                 TextButton(onClick = {
-                                    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                                    val uri = manager.getUriForDownloadedFile(item.id)
-                                    if (uri != null) {
+                                    runCatching {
+                                        val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                        val uri = manager.getUriForDownloadedFile(item.id)
+                                            ?: throw IllegalStateException("Downloaded file is unavailable")
                                         val mime = context.contentResolver.getType(uri) ?: "*/*"
-                                        runCatching {
-                                            context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
-                                                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
-                                        }.onFailure {
-                                            Toast.makeText(context, "No app found to open this file", Toast.LENGTH_LONG).show()
-                                        }
-                                    } else Toast.makeText(context, "Downloaded file is unavailable", Toast.LENGTH_LONG).show()
+                                        context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime)
+                                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    }.onFailure {
+                                        Toast.makeText(
+                                            context,
+                                            if (it is IllegalStateException) it.message else "Could not open downloaded file. Check that a compatible app is installed.",
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    }
                                 }) {
                                     Icon(Icons.Rounded.OpenInNew, contentDescription = null)
                                     Text("Open")
