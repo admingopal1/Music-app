@@ -233,14 +233,16 @@ class MusicService : MediaSessionService() {
 
 /** Supplies yt-dlp's per-stream request headers to Media3 without creating another player. */
 object StreamHeaderRegistry {
-    @Volatile private var streamUrl: String? = null
-    @Volatile private var streamHeaders: Map<String, String> = emptyMap()
+    // Publish the URL and its headers as one immutable snapshot so a concurrent
+    // Media3 request can never observe a new URL paired with the previous headers.
+    @Volatile private var current: Pair<String, Map<String, String>>? = null
 
     fun register(url: String, headers: Map<String, String>) {
-        streamUrl = url
-        streamHeaders = headers.toMap()
+        current = url to headers.toMap()
     }
 
-    fun headersFor(url: String): Map<String, String> =
-        if (url == streamUrl) streamHeaders else emptyMap()
+    fun headersFor(url: String): Map<String, String> {
+        val snapshot = current ?: return emptyMap()
+        return if (url == snapshot.first) snapshot.second else emptyMap()
+    }
 }
