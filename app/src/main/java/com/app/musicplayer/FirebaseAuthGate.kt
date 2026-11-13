@@ -210,13 +210,9 @@ private fun AuthScreen(auth: FirebaseAuth) {
         Spacer(Modifier.height(12.dp))
         OutlinedButton(
             onClick = {
-                if (context !is Activity) {
-                    message = "Google sign-in is unavailable in this context."
-                } else {
-                    busy = true
-                    message = null
-                    googleLauncher.launch(googleSignInClient.signInIntent)
-                }
+                busy = true
+                message = null
+                googleLauncher.launch(googleSignInClient.signInIntent)
             },
             modifier = Modifier.fillMaxWidth().height(54.dp),
             enabled = !busy,
