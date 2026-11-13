@@ -19,7 +19,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 removes unused bytecode and optimizes the remaining code.
+            isMinifyEnabled = true
+            // Remove resources made unreachable by R8/code shrinking.
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
 
