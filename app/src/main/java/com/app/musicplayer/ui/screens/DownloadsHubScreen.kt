@@ -323,8 +323,8 @@ fun DownloadsHubScreen() {
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(platformHint!!, style = MaterialTheme.typography.bodyMedium)
-                        if (url.startsWith("https://", true) || url.startsWith("http://", true)) {
-                            OutlinedButton(onClick = { openLink(url) }) {
+                        if (url.trim().startsWith("https://", true) || url.trim().startsWith("http://", true)) {
+                            OutlinedButton(onClick = { openLink(url.trim()) }) {
                                 Icon(Icons.Rounded.OpenInBrowser, contentDescription = null)
                                 Spacer(Modifier.width(6.dp))
                                 Text("Open link")
