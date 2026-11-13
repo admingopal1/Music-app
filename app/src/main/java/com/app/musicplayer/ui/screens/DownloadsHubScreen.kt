@@ -336,9 +336,16 @@ fun DownloadsHubScreen() {
                     Text("Recent downloads", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     Text("Managed by Android Download Manager", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                TextButton(onClick = ::refresh) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
-                    Text("Refresh")
+                TextButton(onClick = ::refresh, enabled = !loading) {
+                    if (loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.width(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(Icons.Rounded.Refresh, contentDescription = "Refresh")
+                    }
+                    Text(if (loading) "Refreshing" else "Refresh")
                 }
             }
         }
@@ -500,7 +507,7 @@ fun DownloadsHubScreen() {
                                         runCatching {
                                             val retryName = uniqueRetryFileName(item.title)
                                             val request = DownloadManager.Request(source)
-                                                .setTitle(item.title)
+                                                .setTitle(retryName)
                                                 .setDescription("Retrying download to Downloads/MusicPlayer")
                                                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                                                 .setAllowedOverMetered(true)
