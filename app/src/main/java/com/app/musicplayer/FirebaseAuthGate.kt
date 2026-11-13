@@ -83,44 +83,57 @@ private fun AuthScreen(auth: FirebaseAuth) {
     val googleLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            busy = true
-            message = null
-            try {
-                val account = GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                    .getResult(ApiException::class.java)
-                val credential = GoogleAuthProvider.getCredential(account.idToken, null)
-                auth.signInWithCredential(credential).addOnCompleteListener { task ->
-                    busy = false
-                    if (task.isSuccessful) {
-                        auth.currentUser?.let { user ->
-                            val profile = hashMapOf<String, Any>(
-                                "email" to (user.email ?: ""),
-                                "displayName" to (user.displayName ?: ""),
-                                "photoUrl" to (user.photoUrl?.toString() ?: ""),
-                                "provider" to "google",
-                                "updatedAt" to FieldValue.serverTimestamp(),
-                            )
-                            FirebaseFirestore.getInstance()
-                                .collection("users")
-                                .document(user.uid)
-                                .set(profile, com.google.firebase.firestore.SetOptions.merge())
-                                .addOnFailureListener { error ->
-                                    message = "Signed in, but profile sync failed: ${error.localizedMessage ?: "check Firestore rules"}"
-                                }
-                        }
-                    } else {
-                        message = task.exception?.localizedMessage
-                            ?: "Google authentication failed. Please try again."
-                    }
-                }
-            } catch (error: ApiException) {
+        // Always inspect the Google result Intent, even when Android reports RESULT_CANCELED.
+        // Google Play services can return a useful ApiException status (for example DEVELOPER_ERROR)
+        // that must not be hidden behind a generic "cancelled" message.
+        busy = true
+        message = null
+        try {
+            val account = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                .getResult(ApiException::class.java)
+            val idToken = account.idToken
+            if (idToken.isNullOrBlank()) {
                 busy = false
-                message = error.localizedMessage ?: "Google sign-in failed. Please try again."
+                message = "Google sign-in returned no ID token. Check the Web client ID in Firebase."
+                return@rememberLauncherForActivityResult
             }
-        } else {
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            auth.signInWithCredential(credential).addOnCompleteListener { task ->
+                busy = false
+                if (task.isSuccessful) {
+                    auth.currentUser?.let { user ->
+                        val profile = hashMapOf<String, Any>(
+                            "email" to (user.email ?: ""),
+                            "displayName" to (user.displayName ?: ""),
+                            "photoUrl" to (user.photoUrl?.toString() ?: ""),
+                            "provider" to "google",
+                            "updatedAt" to FieldValue.serverTimestamp(),
+                        )
+                        FirebaseFirestore.getInstance()
+                            .collection("users")
+                            .document(user.uid)
+                            .set(profile, com.google.firebase.firestore.SetOptions.merge())
+                            .addOnFailureListener { error ->
+                                message = "Signed in, but profile sync failed: ${error.localizedMessage ?: "check Firestore rules"}"
+                            }
+                    }
+                } else {
+                    message = task.exception?.localizedMessage
+                        ?: "Google authentication failed. Please try again."
+                }
+            }
+        } catch (error: ApiException) {
             busy = false
-            message = "Google sign-in cancelled."
+            val statusCode = error.statusCode
+            message = when (statusCode) {
+                12501 -> "Google sign-in was cancelled (status 12501)."
+                10 -> "Google sign-in configuration error (status 10). Check SHA-1/SHA-256 and Web client ID in Firebase."
+                7 -> "Google sign-in network error (status 7). Check your internet connection."
+                else -> "Google sign-in failed (status $statusCode): ${error.status.message ?: error.localizedMessage ?: "Unknown Google Play services error"}"
+            }
+        } catch (error: Exception) {
+            busy = false
+            message = "Google sign-in failed: ${error.localizedMessage ?: "Unknown error"}"
         }
     }
 
