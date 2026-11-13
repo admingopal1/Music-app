@@ -59,16 +59,20 @@ object DirectMediaUrlValidator {
         val platform = socialHosts.entries.firstOrNull { (_, domains) ->
             domains.any { domain -> host == domain || host.endsWith(".$domain") }
         }?.key
-        if (platform != null) return DirectMediaUrlResult.Social(platform)
 
+        // A recognized platform may also host an authorized direct media file.
+        // Prefer a supported file extension, then fall back to social-page detection.
         val fileName = uri.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-            ?: return DirectMediaUrlResult.Invalid("The URL does not point to a media file.")
-        val extension = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
-        if (extension !in allowedExtensions) {
-            return DirectMediaUrlResult.Invalid(
-                "This link is not a direct media file. Use a direct MP4, WebM, MOV or supported audio-file URL."
-            )
+        val extension = fileName?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
+        if (fileName != null && extension in allowedExtensions) {
+            return DirectMediaUrlResult.Valid(value, fileName)
         }
-        return DirectMediaUrlResult.Valid(value, fileName)
+        if (platform != null) return DirectMediaUrlResult.Social(platform)
+        if (fileName == null) {
+            return DirectMediaUrlResult.Invalid("The URL does not point to a media file.")
+        }
+        return DirectMediaUrlResult.Invalid(
+            "This link is not a direct media file. Use a direct MP4, WebM, MOV or supported audio-file URL."
+        )
     }
 }
