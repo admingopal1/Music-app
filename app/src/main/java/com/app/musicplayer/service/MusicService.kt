@@ -13,6 +13,10 @@ import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultMediaSourceFactory
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
@@ -73,6 +77,14 @@ class MusicService : MediaSessionService() {
         val enhancerProcessor = EnhancerProcessor()
         val audioLevelProcessor = AudioLevelProcessor()
 
+        val mediaSourceFactory = DefaultMediaSourceFactory(this).setDataSourceFactory(
+            ResolvingDataSource.Factory(DefaultDataSource.Factory(this)) { dataSpec ->
+                val headers = StreamHeaderRegistry.headersFor(dataSpec.uri.toString())
+                if (headers.isEmpty()) dataSpec
+                else dataSpec.buildUpon().setHttpRequestHeaders(headers).build()
+            }
+        )
+
         val builder = if (useDsp) {
             val renderers = object : DefaultRenderersFactory(this) {
                 override fun buildAudioSink(
@@ -90,6 +102,7 @@ class MusicService : MediaSessionService() {
             ExoPlayer.Builder(this)
         }
 
+        builder.setMediaSourceFactory(mediaSourceFactory)
         val p = builder
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -215,4 +228,19 @@ class MusicService : MediaSessionService() {
         AudioLevelMonitor.reset()
         super.onDestroy()
     }
+}
+
+
+/** Supplies yt-dlp's per-stream request headers to Media3 without creating another player. */
+object StreamHeaderRegistry {
+    @Volatile private var streamUrl: String? = null
+    @Volatile private var streamHeaders: Map<String, String> = emptyMap()
+
+    fun register(url: String, headers: Map<String, String>) {
+        streamUrl = url
+        streamHeaders = headers.toMap()
+    }
+
+    fun headersFor(url: String): Map<String, String> =
+        if (url == streamUrl) streamHeaders else emptyMap()
 }
