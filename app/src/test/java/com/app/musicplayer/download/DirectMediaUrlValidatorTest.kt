@@ -27,6 +27,11 @@ class DirectMediaUrlValidatorTest {
         assertTrue(DirectMediaUrlValidator.validate("https://example.com/stream.m3u8") is DirectMediaUrlResult.Invalid)
     }
 
+    @Test fun rejectsExtensionOnlyHiddenFileNames() {
+        assertTrue(DirectMediaUrlValidator.validate("https://example.com/.mp4") is DirectMediaUrlResult.Invalid)
+        assertTrue(DirectMediaUrlValidator.validate("https://example.com/.mp3?token=abc") is DirectMediaUrlResult.Invalid)
+    }
+
     @Test fun acceptsDirectMediaFilesHostedOnRecognizedSocialDomains() {
         val cases = mapOf(
             "https://cdn.instagram.com/media/clip.mp4?token=abc" to "clip.mp4",

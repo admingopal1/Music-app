@@ -64,7 +64,7 @@ object DirectMediaUrlValidator {
         // Prefer a supported file extension, then fall back to social-page detection.
         val fileName = uri.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
         val extension = fileName?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
-        if (fileName != null && extension in allowedExtensions) {
+        if (fileName != null && fileName.substringBeforeLast('.').isNotBlank() && extension in allowedExtensions) {
             return DirectMediaUrlResult.Valid(value, fileName)
         }
         if (platform != null) return DirectMediaUrlResult.Social(platform)
