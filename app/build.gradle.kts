@@ -66,6 +66,7 @@ dependencies {
     // Firebase client SDKs (project-specific google-services.json still required for runtime use)
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation("com.google.firebase:firebase-firestore")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")

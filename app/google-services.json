@@ -12,6 +12,12 @@
           "package_name": "com.app.musicplayer"
         }
       },
+      "oauth_client": [
+        {
+          "client_id": "290611399615-a2r7rfh25ethufdiufodao8escua5e94.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDyxfcM3GLhMF4vYwqnNs1ufGfnhTU8lzw"
@@ -19,7 +25,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "290611399615-a2r7rfh25ethufdiufodao8escua5e94.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
