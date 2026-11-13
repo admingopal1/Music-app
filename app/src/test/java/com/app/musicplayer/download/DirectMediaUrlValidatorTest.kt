@@ -34,6 +34,16 @@ class DirectMediaUrlValidatorTest {
         assertTrue(DirectMediaUrlValidator.validate("https://instagram.com.evil.example/video.mp4") is DirectMediaUrlResult.Valid)
     }
 
+    @Test fun identifiesMoreSocialHosts() {
+        assertEquals("TikTok", (DirectMediaUrlValidator.validate("https://vm.tiktok.com/ZMabc/") as DirectMediaUrlResult.Social).platform)
+        assertEquals("X", (DirectMediaUrlValidator.validate("https://x.com/user/status/1") as DirectMediaUrlResult.Social).platform)
+        assertEquals("X", (DirectMediaUrlValidator.validate("https://twitter.com/user/status/1") as DirectMediaUrlResult.Social).platform)
+        assertEquals("Reddit", (DirectMediaUrlValidator.validate("https://www.reddit.com/r/a/comments/b/c/") as DirectMediaUrlResult.Social).platform)
+        assertEquals("Vimeo", (DirectMediaUrlValidator.validate("https://vimeo.com/22439234") as DirectMediaUrlResult.Social).platform)
+        assertTrue(DirectMediaUrlValidator.validate("https://notx.com/video.mp4") is DirectMediaUrlResult.Valid)
+        assertTrue(DirectMediaUrlValidator.validate("https://tiktok.com.evil.example/video.mp4") is DirectMediaUrlResult.Valid)
+    }
+
     @Test fun rejectsEmbeddedCredentialsAndInvalidPorts() {
         assertTrue(DirectMediaUrlValidator.validate("https://user:pass@example.com/video.mp4") is DirectMediaUrlResult.Invalid)
         assertTrue(DirectMediaUrlValidator.validate("https://example.com:99999/video.mp4") is DirectMediaUrlResult.Invalid)
