@@ -130,8 +130,10 @@ fun DownloadsHubScreen() {
     }
 
     fun refresh() {
+        // Ignore repeated taps while a manual refresh is already in progress.
+        if (loading) return
+        loading = true
         scope.launch {
-            loading = true
             try {
                 refreshRows()
             } finally {
