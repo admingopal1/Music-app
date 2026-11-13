@@ -10,6 +10,8 @@ import com.app.musicplayer.download.DirectMediaUrlResult
 import com.app.musicplayer.download.DirectMediaUrlValidator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
@@ -393,7 +395,10 @@ fun DownloadsHubScreen() {
                 Text("$activeCount active  •  $completedCount completed  •  $failedCount failed",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     listOf("All", "Active", "Completed", "Failed").forEach { filter ->
                         TextButton(onClick = { selectedFilter = filter }) {
                             Text(
@@ -442,7 +447,7 @@ fun DownloadsHubScreen() {
                 }
             }
         } else {
-            items(sortedVisibleRows, key = { it.id }) { item ->
+            items(sortedVisibleRows.take(30), key = { it.id }) { item ->
                 Card(
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.09f)),
@@ -469,15 +474,15 @@ fun DownloadsHubScreen() {
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            downloadSpeeds[item.id]?.let { speed ->
-                                val eta = speed.etaSeconds?.let(::formatDuration)
-                                Text(
-                                    if (eta != null) "${formatBytes(speed.bytesPerSecond)}/s  •  ETA $eta"
-                                    else "${formatBytes(speed.bytesPerSecond)}/s",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
+                        }
+                        downloadSpeeds[item.id]?.let { speed ->
+                            val eta = speed.etaSeconds?.let(::formatDuration)
+                            Text(
+                                if (eta != null) "${formatBytes(speed.bytesPerSecond)}/s  •  ETA $eta"
+                                else "${formatBytes(speed.bytesPerSecond)}/s",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             if (item.sourceUri.isNotBlank()) {
@@ -685,7 +690,7 @@ private fun queryDownloads(context: Context): List<DownloadRow> {
             val total = if (totalCol >= 0) c.getLong(totalCol).coerceAtLeast(0L) else 0L
             out += DownloadRow(c.getLong(idCol), c.getString(titleCol) ?: "Media file", status, downloaded, total, if (uriCol >= 0) c.getString(uriCol).orEmpty() else "", failureReason, if (modifiedCol >= 0) c.getLong(modifiedCol) else 0L)
         }
-        out.sortedByDescending { it.id }.take(30)
+        out.sortedByDescending { it.id }
     }
 }
 
