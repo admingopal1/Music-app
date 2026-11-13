@@ -79,7 +79,7 @@ fun VideosScreen(vm: PlayerViewModel) {
             VideoTab("YouTube", showYouTube, Modifier.weight(1f)) { showYouTube = true; showDownloads = false }
         }
         if (showDownloads) {
-            DownloadsHubScreen()
+            DownloadsHubScreen(onSaved = vm::loadVideos)
             return@Column
         }
         if (showYouTube) {
