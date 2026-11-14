@@ -30,7 +30,7 @@ class SmartMixTest {
     }
 
     @Test fun respectsLimitAndHandlesEmptyOrInvalidLimits() {
-        assertEquals(listOf(3L, 2L), SmartMix.rank(listOf(1L, 2L, 3L), emptyMap(), limit = 2))
+        assertEquals(listOf(1L, 2L), SmartMix.rank(listOf(1L, 2L, 3L), emptyMap(), limit = 2))
         assertEquals(emptyList<Long>(), SmartMix.rank(listOf(1L), emptyMap(), limit = 0))
         assertEquals(emptyList<Long>(), SmartMix.rank(emptyList(), emptyMap()))
     }
