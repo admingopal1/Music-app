@@ -1,7 +1,5 @@
 package com.app.musicplayer.ui.screens
 
-import androidx.compose.runtime.collectAsState
-import com.app.musicplayer.download.SocialDownloader
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
@@ -73,7 +71,7 @@ private data class DownloadRow(
 )
 
 @Composable
-fun DownloadsHubScreen(onSaved: () -> Unit = {}) {
+fun DownloadsHubScreen() {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
@@ -81,10 +79,6 @@ fun DownloadsHubScreen(onSaved: () -> Unit = {}) {
     var rows by remember { mutableStateOf(emptyList<DownloadRow>()) }
     var loading by remember { mutableStateOf(false) }
     var platformHint by remember { mutableStateOf<String?>(null) }
-    val socialTask by SocialDownloader.task.collectAsState()
-    val savedCount by SocialDownloader.savedCount.collectAsState()
-    // Refresh the Videos list whenever a social download finishes (also when returning to this tab).
-    androidx.compose.runtime.LaunchedEffect(savedCount) { if (savedCount > 0) onSaved() }
 
     fun refresh() {
         scope.launch {
@@ -110,12 +104,8 @@ fun DownloadsHubScreen(onSaved: () -> Unit = {}) {
                 return
             }
             is DirectMediaUrlResult.Social -> {
-                if (socialTask?.status == SocialDownloader.Status.RUNNING) {
-                    Toast.makeText(context, "A download is already running", Toast.LENGTH_LONG).show()
-                    return
-                }
-                platformHint = null
-                SocialDownloader.startDownload(context, url.trim(), validation.platform)
+                platformHint = "${validation.platform} post link detected. This is a post page, not a direct media file. Open it in the official site/app. Downloads work when the creator provides an accessible direct media URL or you own and export the file. Private/restricted posts are not bypassed."
+                Toast.makeText(context, "Social post link detected — see the note below", Toast.LENGTH_LONG).show()
                 return
             }
             is DirectMediaUrlResult.Valid -> Unit
@@ -165,48 +155,12 @@ fun DownloadsHubScreen(onSaved: () -> Unit = {}) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 Text("Downloads", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                Text("Save direct files and public social videos to your phone", color = Color.White.copy(alpha = 0.68f))
-            }
-        }
-        socialTask?.let { t ->
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.10f)),
-                    shape = RoundedCornerShape(22.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        when (t.status) {
-                            SocialDownloader.Status.RUNNING -> {
-                                Text("Downloading from ${t.platform}…", fontWeight = FontWeight.SemiBold)
-                                if (t.progress in 0f..1f) {
-                                    androidx.compose.material3.LinearProgressIndicator(
-                                        progress = { t.progress },
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                    Text("${(t.progress * 100).toInt()}%", style = MaterialTheme.typography.bodySmall)
-                                } else {
-                                    androidx.compose.material3.LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                                    Text("Getting the video…", style = MaterialTheme.typography.bodySmall)
-                                }
-                                TextButton(onClick = { SocialDownloader.cancel() }) { Text("Cancel") }
-                            }
-                            else -> {
-                                Text(
-                                    t.message.orEmpty(),
-                                    color = if (t.status == SocialDownloader.Status.FAILED) MaterialTheme.colorScheme.error
-                                    else MaterialTheme.colorScheme.onSurface,
-                                )
-                                TextButton(onClick = { SocialDownloader.dismiss() }) { Text("Dismiss") }
-                            }
-                        }
-                    }
-                }
+                Text("Save direct video and audio files to your phone", color = Color.White.copy(alpha = 0.68f))
             }
         }
         item {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.10f)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF29203F).copy(alpha = 0.94f)),
                 shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -242,7 +196,7 @@ fun DownloadsHubScreen(onSaved: () -> Unit = {}) {
                         }
                     }
                     Text(
-                        "Direct files (MP4, WebM, MKV, MOV, M4V, audio) are saved in Downloads/MusicPlayer. Public links from Instagram, Facebook, TikTok, X, Reddit and Vimeo are saved in your Videos. Only download your own content or content you have permission to save. Private posts are not supported.",
+                        "Supported direct files: MP4, WebM, MKV, MOV, M4V and common audio formats. Downloads are saved in Downloads/MusicPlayer.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
