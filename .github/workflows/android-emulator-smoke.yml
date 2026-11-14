@@ -38,9 +38,10 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
-          profile: pixel_2
+          profile: pixel_6
           emulator-boot-timeout: 900
-          # Keep emulator defaults to avoid ADB animation-setting failures.
+          # Give the API 36 system image enough RAM/CPU to avoid system_server stalls.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -memory 4096 -cores 4
           disable-animations: false
           script: |
             bash -c 'set +e; gradle connectedDebugAndroidTest --stacktrace --info; test_exit=$?; mkdir -p app/build/reports/android-emulator; adb logcat -d -v threadtime > app/build/reports/android-emulator/logcat.txt || true; adb shell dumpsys activity activities > app/build/reports/android-emulator/activities.txt || true; adb shell dumpsys package com.app.musicplayer > app/build/reports/android-emulator/package.txt || true; exit "$test_exit"'
