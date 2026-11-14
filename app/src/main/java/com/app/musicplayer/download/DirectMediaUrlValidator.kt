@@ -43,17 +43,6 @@ object DirectMediaUrlValidator {
             return DirectMediaUrlResult.Social("Facebook")
         }
 
-        // These are web pages, not files. They are handed to the in-app yt-dlp engine (SocialDownloader).
-        val social = when {
-            host == "tiktok.com" || host.endsWith(".tiktok.com") -> "TikTok"
-            host == "x.com" || host.endsWith(".x.com") || host == "twitter.com" || host.endsWith(".twitter.com") -> "X"
-            host == "reddit.com" || host.endsWith(".reddit.com") || host == "redd.it" || host.endsWith(".redd.it") -> "Reddit"
-            host == "vimeo.com" || host.endsWith(".vimeo.com") -> "Vimeo"
-            host == "threads.net" || host.endsWith(".threads.net") -> "Threads"
-            else -> null
-        }
-        if (social != null) return DirectMediaUrlResult.Social(social)
-
         val fileName = uri.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
             ?: return DirectMediaUrlResult.Invalid("The URL does not point to a media file.")
         val extension = fileName.substringAfterLast('.', "").lowercase(Locale.ROOT)
