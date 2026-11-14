@@ -295,6 +295,14 @@ class SonyAudioEffects private constructor(context: Context) {
             "Heavy Metal" to listOf(6f, 3f, -2f, 4f, 6f),
             "Hip-Hop" to listOf(7f, 5f, 0f, 2f, 3f),
             "Classical" to listOf(4f, 3f, -2f, 3f, 4f),
+            "Acoustic" to listOf(3f, 2f, 1f, 3f, 2f),
+            "Vocal" to listOf(-2f, 1f, 5f, 4f, 1f),
+            "R&B" to listOf(5f, 3f, 1f, 3f, 4f),
+            "Electronic" to listOf(5f, 2f, 0f, 3f, 5f),
+            "Dance" to listOf(6f, 3f, 0f, 4f, 5f),
+            "Podcast" to listOf(-3f, 0f, 4f, 3f, -2f),
+            "Treble Boost" to listOf(-2f, -1f, 1f, 5f, 7f),
+            "Deep Bass" to listOf(10f, 6f, 1f, -1f, -2f),
         )
 
         private fun curveAt(points: List<Float>, hz: Int): Float {
