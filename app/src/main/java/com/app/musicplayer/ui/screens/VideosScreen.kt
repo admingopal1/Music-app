@@ -1,7 +1,7 @@
 package com.app.musicplayer.ui.screens
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
