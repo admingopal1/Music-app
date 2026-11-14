@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [ main, feature/vidmate-style-download-hub ]
+    branches: [ main, feature/vidmate-style-download-hub, upgrade/flagship-audio-lyrics-video ]
   pull_request:
   workflow_dispatch:
 
