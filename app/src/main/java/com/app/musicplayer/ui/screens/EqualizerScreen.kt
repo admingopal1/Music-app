@@ -152,10 +152,10 @@ fun EqualizerScreen(fx: SonyAudioEffects) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Advanced DSP Studio", style = MaterialTheme.typography.titleLarge, color = Color.White)
                 Text("Live stereo processing · 16-bit / float PCM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                DspSlider("Clarity", clarity, 0f..1f, { clarity = it; prefs.edit().putFloat("enh_clarity", it).apply() }, "\${(clarity * 100).roundToInt()}%")
-                DspSlider("Headphone crossfeed", crossfeed, 0f..1f, { crossfeed = it; prefs.edit().putFloat("enh_crossfeed", it).apply() }, "\${(crossfeed * 100).roundToInt()}%")
-                DspSlider("Stereo width", width, 0f..2f, { width = it; prefs.edit().putFloat("enh_width", it).apply() }, "\${(width * 100).roundToInt()}%")
-                DspSlider("Left / right balance", balance, -1f..1f, { balance = it; prefs.edit().putFloat("enh_balance", it).apply() }, when { balance < -0.01f -> "L \${(kotlin.math.abs(balance) * 100).roundToInt()}%"; balance > 0.01f -> "R \${(balance * 100).roundToInt()}%"; else -> "Center" })
+                DspSlider("Clarity", clarity, 0f..1f, { clarity = it; prefs.edit().putFloat("enh_clarity", it).apply() }, "${(clarity * 100).roundToInt()}%")
+                DspSlider("Headphone crossfeed", crossfeed, 0f..1f, { crossfeed = it; prefs.edit().putFloat("enh_crossfeed", it).apply() }, "${(crossfeed * 100).roundToInt()}%")
+                DspSlider("Stereo width", width, 0f..2f, { width = it; prefs.edit().putFloat("enh_width", it).apply() }, "${(width * 100).roundToInt()}%")
+                DspSlider("Left / right balance", balance, -1f..1f, { balance = it; prefs.edit().putFloat("enh_balance", it).apply() }, when { balance < -0.01f -> "L ${(kotlin.math.abs(balance) * 100).roundToInt()}%"; balance > 0.01f -> "R ${(balance * 100).roundToInt()}%"; else -> "Center" })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Mono compatibility", style = MaterialTheme.typography.titleSmall)
