@@ -17,6 +17,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -134,8 +137,18 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                 Column {
                     if (tab != 2) MiniPlayer(vm) { openTab(2) }
                     NavigationBar(
-                        containerColor = Color(0xFF171329).copy(alpha = 0.98f),
-                        tonalElevation = 10.dp,
+                        modifier = androidx.compose.ui.Modifier
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                            .clip(RoundedCornerShape(26.dp))
+                            .border(
+                                width = 1.dp,
+                                brush = Brush.verticalGradient(
+                                    listOf(Color.White.copy(alpha = 0.24f), Color.White.copy(alpha = 0.06f))
+                                ),
+                                shape = RoundedCornerShape(26.dp),
+                            ),
+                        containerColor = Color(0xFF211A35).copy(alpha = 0.94f),
+                        tonalElevation = 0.dp,
                         windowInsets = WindowInsets.navigationBars,
                     ) {
                         primaryTabs.forEach { item ->
