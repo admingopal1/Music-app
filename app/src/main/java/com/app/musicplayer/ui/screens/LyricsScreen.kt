@@ -3,6 +3,9 @@ package com.app.musicplayer.ui.screens
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -161,6 +165,19 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                         ) {
                             itemsIndexed(l.lines) { i, line ->
                                 val isCurrent = i == current
+                                val lineScale by animateFloatAsState(
+                                    targetValue = if (isCurrent) 1f else 0.96f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMedium,
+                                    ),
+                                    label = "lyric-line-scale",
+                                )
+                                val lineAlpha by animateFloatAsState(
+                                    targetValue = if (isCurrent) 1f else 0.58f,
+                                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                                    label = "lyric-line-alpha",
+                                )
                                 val activeWord = if (isCurrent) line.words.indexOfLast { it.timeMs <= pos } else -1
                                 val lyricText = remember(line, activeWord, accent) {
                                     buildAnnotatedString {
@@ -181,7 +198,9 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                                 }
                                 Text(
                                     lyricText,
-                                    modifier = Modifier.fillMaxWidth().clickable(enabled = l.synced) {
+                                    modifier = Modifier.fillMaxWidth()
+                                        .graphicsLayer { scaleX = lineScale; scaleY = lineScale; alpha = lineAlpha }
+                                        .clickable(enabled = l.synced) {
                                         vm.seekTo((line.timeMs - offsetMs).coerceAtLeast(0L))
                                     },
                                     textAlign = if (l.synced) TextAlign.Center else TextAlign.Start,
