@@ -25,7 +25,10 @@ object AudioLevelMonitor {
     val levels: StateFlow<List<Float>> = _levels.asStateFlow()
 
     internal fun publish(values: FloatArray) {
-        _levels.value = List(BAND_COUNT) { i -> values.getOrElse(i) { 0f }.coerceIn(0f, 1f) }
+        _levels.value = List(BAND_COUNT) { i ->
+            val value = values.getOrElse(i) { 0f }
+            if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
+        }
     }
 
     fun reset() {
@@ -92,7 +95,7 @@ class AudioLevelProcessor : BaseAudioProcessor() {
                     mono += if (encoding == C.ENCODING_PCM_16BIT) {
                         samples.short / 32768f
                     } else {
-                        samples.float.coerceIn(-1f, 1f)
+                        sanitizePcmSample(samples.float)
                     }
                 }
                 acceptSample(mono / channelCount)
