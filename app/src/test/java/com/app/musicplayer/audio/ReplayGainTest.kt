@@ -57,4 +57,33 @@ class ReplayGainTest {
     fun gainConversionUsesDecibels() {
         assertEquals(2.0f, ReplayGain.dbToLinear(6.0206f), 0.001f)
     }
+    @Test
+    fun ignoresNonFiniteTagNumbersAndUsesSafeFallback() {
+        val info = ReplayGain.fromTags(
+            mapOf(
+                "replaygain_track_gain" to "999999999999999999999999",
+                "replaygain_track_peak" to "NaN",
+            )
+        )
+        assertNull(info)
+        assertEquals(0f, ReplayGain.appliedDb(null, settings.copy(fallbackDb = Float.NaN)) ?: Float.NaN, 0f)
+    }
+
+    @Test
+    fun appliedGainSanitizesNonFiniteMetadataAndSettings() {
+        val info = RgInfo(
+            trackGain = Float.NaN,
+            trackPeak = Float.POSITIVE_INFINITY,
+            albumGain = 4f,
+            albumPeak = 0.5f,
+        )
+        assertEquals(4f, ReplayGain.appliedDb(info, settings.copy(preampDb = Float.NaN)) ?: Float.NaN, 0.001f)
+    }
+
+    @Test
+    fun dbConversionNeverReturnsNonFiniteGain() {
+        assertEquals(1f, ReplayGain.dbToLinear(Float.NaN), 0f)
+        assertEquals(1f, ReplayGain.dbToLinear(Float.POSITIVE_INFINITY), 0f)
+    }
+
 }
