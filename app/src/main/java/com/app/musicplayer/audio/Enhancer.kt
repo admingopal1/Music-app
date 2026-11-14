@@ -21,9 +21,18 @@ data class EnhancerSettings(
     val mono: Boolean = false,
     val limiter: Boolean = false,  // soft limiter to avoid clipping
 ) {
+    /** Keep persisted or externally edited preferences inside the stable DSP operating range. */
+    fun normalized() = copy(
+        clarity = clarity.coerceIn(0f, 1f),
+        crossfeed = crossfeed.coerceIn(0f, 1f),
+        width = width.coerceIn(0f, 2f),
+        balance = balance.coerceIn(-1f, 1f),
+    )
+
     fun write(p: SharedPreferences) {
-        p.edit().putFloat("enh_clarity", clarity).putFloat("enh_crossfeed", crossfeed).putFloat("enh_width", width)
-            .putFloat("enh_balance", balance).putBoolean("enh_mono", mono).putBoolean("enh_limiter", limiter).apply()
+        val safe = normalized()
+        p.edit().putFloat("enh_clarity", safe.clarity).putFloat("enh_crossfeed", safe.crossfeed).putFloat("enh_width", safe.width)
+            .putFloat("enh_balance", safe.balance).putBoolean("enh_mono", safe.mono).putBoolean("enh_limiter", safe.limiter).apply()
     }
 
     companion object {
@@ -34,7 +43,7 @@ data class EnhancerSettings(
             balance = p.getFloat("enh_balance", 0f),
             mono = p.getBoolean("enh_mono", false),
             limiter = p.getBoolean("enh_limiter", false),
-        )
+        ).normalized()
     }
 }
 
