@@ -64,13 +64,16 @@ object Lrc {
         return min * 60_000L + sec * 1000L + ms
     }
 
-    private fun toMs(m: MatchResult): Long = wordTime(
-        object : MatchResult {
-            override val value: String get() = m.value
-            override val groups: MatchGroupCollection get() = m.groups
-            override val groupValues: List<String> get() = listOf("", m.groupValues[1], m.groupValues[2], m.groupValues[3])
-            override val range: IntRange get() = m.range
-            override fun next(): MatchResult? = null
+    private fun toMs(m: MatchResult): Long {
+        val min = m.groupValues[1].toLong()
+        val sec = m.groupValues[2].toLong()
+        val fraction = m.groupValues[3]
+        val ms = when (fraction.length) {
+            0 -> 0L
+            1 -> fraction.toLong() * 100
+            2 -> fraction.toLong() * 10
+            else -> fraction.take(3).toLong()
         }
-    )
+        return min * 60_000L + sec * 1000L + ms
+    }
 }
