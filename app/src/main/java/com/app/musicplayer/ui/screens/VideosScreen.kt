@@ -1,5 +1,8 @@
 package com.app.musicplayer.ui.screens
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -142,7 +145,8 @@ private fun VideoRow(video: Video, onClick: () -> Unit) {
     }
     val accent = MaterialTheme.colorScheme.primary
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+        Modifier.fillMaxWidth().animateContentSize(animationSpec = spring())
+            .clip(RoundedCornerShape(18.dp))
             .background(Color.White.copy(alpha = 0.055f))
             .border(1.dp, Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
             .clickable(onClick = onClick).padding(10.dp),
@@ -181,13 +185,22 @@ private fun VideoRow(video: Video, onClick: () -> Unit) {
 
 @Composable
 private fun VideoTab(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) Color(0xFF8247C7) else Color.Transparent,
+        animationSpec = spring(), label = "video-tab-container",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) Color.White else Color.White.copy(alpha = 0.68f),
+        animationSpec = spring(), label = "video-tab-content",
+    )
     Box(
-        modifier.clip(RoundedCornerShape(14.dp))
-            .background(if (selected) Brush.linearGradient(listOf(Color(0xFF9A55E8), Color(0xFF6537B7))) else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent)))
+        modifier.animateContentSize(animationSpec = spring())
+            .clip(RoundedCornerShape(14.dp))
+            .background(containerColor)
             .clickable(onClick = onClick).padding(vertical = 11.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (selected) Color.White else Color.White.copy(alpha = 0.68f),
+        Text(label, color = contentColor,
             style = MaterialTheme.typography.labelLarge, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
     }
 }
