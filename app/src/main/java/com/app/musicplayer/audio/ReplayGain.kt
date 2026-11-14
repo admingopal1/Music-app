@@ -40,28 +40,33 @@ object ReplayGain {
         )
     }
 
-    fun dbToLinear(db: Float): Float = 10.0.pow(db / 20.0).toFloat()
+    fun dbToLinear(db: Float): Float {
+        val safeDb = if (db.isFinite()) db.coerceIn(-24f, 24f) else 0f
+        return 10.0.pow(safeDb / 20.0).toFloat()
+    }
 
     /** The gain in dB that will be applied for this track, or null when ReplayGain is off. */
     fun appliedDb(info: RgInfo?, s: Settings): Float? {
-        if (s.mode == MODE_OFF) return null
+        if (s.mode !in MODE_TRACK..MODE_ALBUM) return null
         val gain: Float? = if (info == null) null
-        else if (s.mode == MODE_ALBUM) info.albumGain ?: info.trackGain
-        else info.trackGain ?: info.albumGain
+        else if (s.mode == MODE_ALBUM) info.albumGain?.takeIf { it.isFinite() } ?: info.trackGain?.takeIf { it.isFinite() }
+        else info.trackGain?.takeIf { it.isFinite() } ?: info.albumGain?.takeIf { it.isFinite() }
         val peak: Float? = if (info == null) null
-        else if (s.mode == MODE_ALBUM) info.albumPeak ?: info.trackPeak
-        else info.trackPeak ?: info.albumPeak
+        else if (s.mode == MODE_ALBUM) info.albumPeak?.takeIf { it.isFinite() && it > 0f } ?: info.trackPeak?.takeIf { it.isFinite() && it > 0f }
+        else info.trackPeak?.takeIf { it.isFinite() && it > 0f } ?: info.albumPeak?.takeIf { it.isFinite() && it > 0f }
 
-        var db = if (gain == null) s.fallbackDb else gain + s.preampDb
-        if (s.limit && peak != null && peak > 0f) {
-            val maxDb = -20f * log10(peak)       // gain at which the loudest sample just reaches full scale
-            db = min(db, maxDb)
+        val preamp = if (s.preampDb.isFinite()) s.preampDb.coerceIn(-12f, 12f) else 0f
+        val fallback = if (s.fallbackDb.isFinite()) s.fallbackDb.coerceIn(-24f, 12f) else 0f
+        var db = if (gain == null) fallback else gain.coerceIn(-24f, 24f) + preamp
+        if (s.limit && peak != null) {
+            val maxDb = -20f * log10(peak) // gain at which the loudest sample just reaches full scale
+            if (maxDb.isFinite()) db = min(db, maxDb)
         }
-        return db.coerceIn(-24f, 24f)
+        return (if (db.isFinite()) db else 0f).coerceIn(-24f, 24f)
     }
 
     private val NUM = Regex("[-+]?\\d+(?:[.,]\\d+)?")
-    private fun num(v: String?): Float? = v?.let { NUM.find(it)?.value?.replace(',', '.')?.toFloatOrNull() }
+    private fun num(v: String?): Float? = v?.let { NUM.find(it)?.value?.replace(',', '.')?.toFloatOrNull()?.takeIf { n -> n.isFinite() } }
 
     /** [tags] keys must be lower-case. Handles ReplayGain 2 tags and Opus R128 tags. */
     fun fromTags(tags: Map<String, String>): RgInfo? {
