@@ -3,6 +3,7 @@ package com.app.musicplayer.ui.screens
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -111,7 +112,14 @@ fun EqualizerScreen(fx: SonyAudioEffects) {
         }
 
         // EQ bands (-12..+12 dB)
-        GlassCard(Modifier.fillMaxWidth()) {
+        GlassCard(
+            Modifier.fillMaxWidth().animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            ),
+        ) {
             if (s.bandLevelsDb.isEmpty()) {
                 Text("No equalizer bands available yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
@@ -132,7 +140,14 @@ fun EqualizerScreen(fx: SonyAudioEffects) {
         }
 
         // Knobs
-        GlassCard(Modifier.fillMaxWidth()) {
+        GlassCard(
+            Modifier.fillMaxWidth().animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            ),
+        ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 Knob("Clear Bass", s.bassStrength, "${(s.bassStrength * 100).roundToInt()}%", on && s.bassSupported) { fx.setClearBass(it) }
                 Knob("Surround 3D", s.virtualizerStrength, "${(s.virtualizerStrength * 100).roundToInt()}%", on && s.virtSupported) { fx.setVirtualizerStrength(it) }
@@ -148,7 +163,14 @@ fun EqualizerScreen(fx: SonyAudioEffects) {
         }
 
         // Software DSP controls are applied live by the service-side EnhancerController.
-        GlassCard(Modifier.fillMaxWidth()) {
+        GlassCard(
+            Modifier.fillMaxWidth().animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            ),
+        ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Advanced DSP Studio", style = MaterialTheme.typography.titleLarge, color = Color.White)
                 Text("Live stereo processing · 16-bit / float PCM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
