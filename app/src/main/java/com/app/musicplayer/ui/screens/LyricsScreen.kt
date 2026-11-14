@@ -43,6 +43,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -158,8 +161,22 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                         ) {
                             itemsIndexed(l.lines) { i, line ->
                                 val isCurrent = i == current
+                                val activeWord = if (isCurrent) line.words.indexOfLast { it.timeMs <= pos } else -1
+                                val lyricText = remember(line, activeWord, accent) {
+                                    if (line.words.isEmpty()) null else buildAnnotatedString {
+                                        line.words.forEachIndexed { wordIndex, word ->
+                                            if (wordIndex == activeWord) {
+                                                withStyle(SpanStyle(color = accent, fontWeight = FontWeight.ExtraBold)) {
+                                                    append(word.text)
+                                                }
+                                            } else {
+                                                append(word.text)
+                                            }
+                                        }
+                                    }
+                                }
                                 Text(
-                                    line.text.ifBlank { "♪" },
+                                    lyricText ?: line.text.ifBlank { "♪" },
                                     modifier = Modifier.fillMaxWidth().clickable(enabled = l.synced) {
                                         vm.seekTo((line.timeMs - offsetMs).coerceAtLeast(0L))
                                     },
