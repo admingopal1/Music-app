@@ -48,7 +48,7 @@ class LrcTest {
     }
 
     @Test fun clampsExtremeOffsetsToOneDay() {
-        val parsed = Lrc.parse("[offset:+999999999]Bounded\\n[00:00.00]Line")!!
+        val parsed = Lrc.parse("[offset:+999999999]Bounded\n[00:00.00]Line")!!
         assertEquals(86_400_000L, parsed.lines.single().timeMs)
     }
 
