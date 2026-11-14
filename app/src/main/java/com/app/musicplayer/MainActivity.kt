@@ -15,6 +15,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -47,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -152,10 +155,28 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                         windowInsets = WindowInsets.navigationBars,
                     ) {
                         primaryTabs.forEach { item ->
+                            val selected = tab == item.destination
+                            val iconScale by androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = if (selected) 1.12f else 1f,
+                                animationSpec = androidx.compose.animation.core.spring(
+                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                                    stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+                                ),
+                                label = "navigation-icon-${item.label}",
+                            )
                             NavigationBarItem(
-                                selected = tab == item.destination,
+                                selected = selected,
                                 onClick = { openTab(item.destination) },
-                                icon = { Icon(item.icon, contentDescription = item.label) },
+                                icon = {
+                                    Icon(
+                                        item.icon,
+                                        contentDescription = item.label,
+                                        modifier = Modifier.graphicsLayer {
+                                            scaleX = iconScale
+                                            scaleY = iconScale
+                                        },
+                                    )
+                                },
                                 label = {
                                     Text(
                                         item.label,
@@ -186,8 +207,17 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             ) {
                 AnimatedContent(
                     targetState = tab,
-                    transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(140)) },
-                    label = "tabs",
+                    transitionSpec = {
+                        (slideInHorizontally(
+                            initialOffsetX = { width -> width / 14 },
+                            animationSpec = tween(260),
+                        ) + fadeIn(tween(220))) togetherWith
+                            (slideOutHorizontally(
+                                targetOffsetX = { width -> -width / 18 },
+                                animationSpec = tween(180),
+                            ) + fadeOut(tween(160)))
+                    },
+                    label = "expressive-tab-transition",
                 ) { destination ->
                     when (destination) {
                         1 -> LibraryScreen(vm, onOpenPlayer = { openTab(2) })
