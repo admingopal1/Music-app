@@ -123,7 +123,7 @@ fun PlayerScreen(vm: PlayerViewModel) {
     val accent = MaterialTheme.colorScheme.primary
     val artImage = remember(art) { art?.asImageBitmap() }
     val song = ui.song
-    var cassetteMode by rememberSaveable { mutableStateOf(false) }
+    var playerVisual by rememberSaveable { mutableStateOf("ARTWORK") }
 
     Box(Modifier.fillMaxSize()) {
         // Backdrop: heavily blurred cover (Modifier.blur is a no-op below Android 12; the gradient still works).
@@ -152,24 +152,62 @@ fun PlayerScreen(vm: PlayerViewModel) {
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(Modifier.height(12.dp))
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("NOW PLAYING", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.72f), fontWeight = FontWeight.Bold)
+                    Text(
+                        if (ui.isPlaying) "●  PLAYING" else "Ⅱ  PAUSED",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = accent,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
                 Box(contentAlignment = Alignment.BottomCenter) {
-                    Crossfade(targetState = cassetteMode, label = "art-player-mode") { cassette ->
-                        if (cassette) CassetteTape(artImage, ui.isPlaying, vinylSize, accent)
-                        else Vinyl(artImage, ui.isPlaying, vinylSize, accent)
+                    Crossfade(targetState = playerVisual, label = "player-visual-mode") { mode ->
+                        when (mode) {
+                            "VINYL" -> Vinyl(artImage, ui.isPlaying, vinylSize, accent)
+                            "CASSETTE" -> CassetteTape(artImage, ui.isPlaying, vinylSize, accent)
+                            else -> ArtworkHero(artImage, vinylSize, accent, ui.isPlaying)
+                        }
                     }
                     Text(
-                        if (cassetteMode) "WALKMAN TAPE" else "VINYL MODE",
+                        when (playerVisual) {
+                            "VINYL" -> "VINYL EXPERIENCE"
+                            "CASSETTE" -> "WALKMAN EXPERIENCE"
+                            else -> "ALBUM ART EXPERIENCE"
+                        },
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.72f),
+                        color = Color.White.copy(alpha = 0.78f),
                         modifier = Modifier.padding(bottom = 12.dp),
                     )
                 }
-                TextButton(onClick = { cassetteMode = !cassetteMode }) {
-                    Icon(if (cassetteMode) Icons.Rounded.Album else Icons.Rounded.MusicNote, null)
-                    Text(if (cassetteMode) " Switch to vinyl" else " Switch to cassette")
+                TextButton(onClick = {
+                    playerVisual = when (playerVisual) {
+                        "ARTWORK" -> "VINYL"
+                        "VINYL" -> "CASSETTE"
+                        else -> "ARTWORK"
+                    }
+                }) {
+                    Icon(
+                        when (playerVisual) {
+                            "ARTWORK" -> Icons.Rounded.Album
+                            "VINYL" -> Icons.Rounded.MusicNote
+                            else -> Icons.Rounded.Album
+                        },
+                        null,
+                    )
+                    Text(
+                        when (playerVisual) {
+                            "ARTWORK" -> "  Try vinyl mode"
+                            "VINYL" -> "  Try cassette mode"
+                            else -> "  Back to album art"
+                        }
+                    )
                 }
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(18.dp))
 
                 Text(
                     song?.title ?: "Nothing playing",
@@ -234,6 +272,48 @@ fun PlayerScreen(vm: PlayerViewModel) {
                 }
                 Spacer(Modifier.height(12.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun ArtworkHero(art: ImageBitmap?, diameter: Dp, accent: Color, playing: Boolean) {
+    val shape = RoundedCornerShape(30.dp)
+    val pulse by animateFloatAsState(
+        if (playing) 1f else 0.985f,
+        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "artwork-presence",
+    )
+    Box(
+        Modifier.size(diameter)
+            .graphicsLayer { scaleX = pulse; scaleY = pulse }
+            .shadow(30.dp, shape, ambientColor = accent.copy(alpha = 0.32f), spotColor = accent.copy(alpha = 0.24f))
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(accent.copy(alpha = 0.8f), Color(0xFF171322)))),
+    ) {
+        if (art != null) {
+            Image(art, "Current album artwork", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        } else {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Icon(Icons.Rounded.MusicNote, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(76.dp))
+            }
+        }
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    0.62f to Color.Transparent,
+                    1f to Color.Black.copy(alpha = 0.24f),
+                )
+            )
+        )
+        Box(
+            Modifier.align(Alignment.TopStart).padding(14.dp)
+                .clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.28f))
+                .border(1.dp, Color.White.copy(alpha = 0.24f), RoundedCornerShape(50))
+                .padding(horizontal = 11.dp, vertical = 7.dp),
+        ) {
+            Text("HI-FI PLAYER", style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
 }
