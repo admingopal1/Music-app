@@ -65,6 +65,9 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     var loading by remember { mutableStateOf(true) }
     var offsetMs by remember { mutableLongStateOf(0L) }
 
+    // A manual sync adjustment belongs to one track; never carry it into the next song.
+    LaunchedEffect(song?.id) { offsetMs = 0L }
+
     val lyrics by produceState<Lyrics?>(null, song?.id, reload) {
         loading = true
         value = if (song != null) vm.lyricsRepo.load(song) else null
