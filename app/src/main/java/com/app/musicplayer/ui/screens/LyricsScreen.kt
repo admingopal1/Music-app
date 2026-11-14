@@ -163,20 +163,24 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                                 val isCurrent = i == current
                                 val activeWord = if (isCurrent) line.words.indexOfLast { it.timeMs <= pos } else -1
                                 val lyricText = remember(line, activeWord, accent) {
-                                    if (line.words.isEmpty()) null else buildAnnotatedString {
-                                        line.words.forEachIndexed { wordIndex, word ->
-                                            if (wordIndex == activeWord) {
-                                                withStyle(SpanStyle(color = accent, fontWeight = FontWeight.ExtraBold)) {
+                                    buildAnnotatedString {
+                                        if (line.words.isEmpty()) {
+                                            append(line.text.ifBlank { "♪" })
+                                        } else {
+                                            line.words.forEachIndexed { wordIndex, word ->
+                                                if (wordIndex == activeWord) {
+                                                    withStyle(SpanStyle(color = accent, fontWeight = FontWeight.ExtraBold)) {
+                                                        append(word.text)
+                                                    }
+                                                } else {
                                                     append(word.text)
                                                 }
-                                            } else {
-                                                append(word.text)
                                             }
                                         }
                                     }
                                 }
                                 Text(
-                                    lyricText ?: line.text.ifBlank { "♪" },
+                                    lyricText,
                                     modifier = Modifier.fillMaxWidth().clickable(enabled = l.synced) {
                                         vm.seekTo((line.timeMs - offsetMs).coerceAtLeast(0L))
                                     },
