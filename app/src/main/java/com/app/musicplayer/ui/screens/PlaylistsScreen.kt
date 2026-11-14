@@ -112,7 +112,9 @@ fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             items(lists.keys.toList(), key = { it }) { name ->
                 val ids = lists[name].orEmpty()
                 val isOpen = expanded == name
-                GlassCard(Modifier.fillMaxWidth()) {
+                GlassCard(Modifier.fillMaxWidth().animateContentSize(
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+                )) {
                     Row(
                         Modifier.fillMaxWidth().clickable { expanded = if (isOpen) null else name },
                         verticalAlignment = Alignment.CenterVertically,
