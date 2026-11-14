@@ -1,5 +1,8 @@
 package com.app.musicplayer.ui.screens
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -304,13 +307,22 @@ private fun LibraryMetric(
 @Composable
 private fun ModePill(label: String, selected: Boolean, onClick: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) accent.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant,
+        animationSpec = spring(), label = "library-filter-color",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = spring(), label = "library-filter-content",
+    )
     Box(
-        Modifier.clip(RoundedCornerShape(50))
-            .background(if (selected) accent.copy(0.25f) else MaterialTheme.colorScheme.surfaceVariant)
+        Modifier.animateContentSize(animationSpec = spring())
+            .clip(RoundedCornerShape(50))
+            .background(containerColor)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Text(label, color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
+        Text(label, color = contentColor, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -319,6 +331,7 @@ private fun GroupRow(title: String, subtitle: String, count: Int, onClick: () ->
     val accent = MaterialTheme.colorScheme.primary
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 3.dp)
+            .animateContentSize(animationSpec = spring())
             .clip(RoundedCornerShape(18.dp))
             .background(Color.White.copy(alpha = 0.055f))
             .border(1.dp, Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
@@ -353,6 +366,7 @@ private fun SongRow(
     val accent = MaterialTheme.colorScheme.primary
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp)
+            .animateContentSize(animationSpec = spring())
             .clip(RoundedCornerShape(18.dp))
             .background(if (current) accent.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.055f))
             .border(1.dp, if (current) accent.copy(alpha = 0.38f) else Color.White.copy(alpha = 0.055f), RoundedCornerShape(18.dp))
