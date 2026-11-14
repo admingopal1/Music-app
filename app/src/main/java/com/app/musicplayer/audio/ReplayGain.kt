@@ -66,7 +66,7 @@ object ReplayGain {
     }
 
     private val NUM = Regex("[-+]?\\d+(?:[.,]\\d+)?")
-    private fun num(v: String?): Float? = v?.let { NUM.find(it)?.value?.replace(',', '.')?.toFloatOrNull()?.takeIf { n -> n.isFinite() } }
+    private fun num(v: String?): Float? = v?.let { NUM.find(it)?.value?.replace(',', '.')?.toFloatOrNull()?.takeIf { n -> n.isFinite() && n in -1000f..1000f } }
 
     /** [tags] keys must be lower-case. Handles ReplayGain 2 tags and Opus R128 tags. */
     fun fromTags(tags: Map<String, String>): RgInfo? {
