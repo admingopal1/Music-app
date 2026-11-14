@@ -3,6 +3,9 @@ package com.app.musicplayer.ui.screens
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,9 +43,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +71,9 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
     var reload by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(true) }
     var offsetMs by remember { mutableLongStateOf(0L) }
+
+    // A manual sync adjustment belongs to one track; never carry it into the next song.
+    LaunchedEffect(song?.id) { offsetMs = 0L }
 
     val lyrics by produceState<Lyrics?>(null, song?.id, reload) {
         loading = true
@@ -155,9 +165,42 @@ fun LyricsDialog(vm: PlayerViewModel, onDismiss: () -> Unit) {
                         ) {
                             itemsIndexed(l.lines) { i, line ->
                                 val isCurrent = i == current
+                                val lineScale by animateFloatAsState(
+                                    targetValue = if (isCurrent) 1f else 0.96f,
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMedium,
+                                    ),
+                                    label = "lyric-line-scale",
+                                )
+                                val lineAlpha by animateFloatAsState(
+                                    targetValue = if (isCurrent) 1f else 0.58f,
+                                    animationSpec = spring(stiffness = Spring.StiffnessLow),
+                                    label = "lyric-line-alpha",
+                                )
+                                val activeWord = if (isCurrent) line.words.indexOfLast { it.timeMs <= pos } else -1
+                                val lyricText = remember(line, activeWord, accent) {
+                                    buildAnnotatedString {
+                                        if (line.words.isEmpty()) {
+                                            append(line.text.ifBlank { "♪" })
+                                        } else {
+                                            line.words.forEachIndexed { wordIndex, word ->
+                                                if (wordIndex == activeWord) {
+                                                    withStyle(SpanStyle(color = accent, fontWeight = FontWeight.ExtraBold)) {
+                                                        append(word.text)
+                                                    }
+                                                } else {
+                                                    append(word.text)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 Text(
-                                    line.text.ifBlank { "♪" },
-                                    modifier = Modifier.fillMaxWidth().clickable(enabled = l.synced) {
+                                    lyricText,
+                                    modifier = Modifier.fillMaxWidth()
+                                        .graphicsLayer { scaleX = lineScale; scaleY = lineScale; alpha = lineAlpha }
+                                        .clickable(enabled = l.synced) {
                                         vm.seekTo((line.timeMs - offsetMs).coerceAtLeast(0L))
                                     },
                                     textAlign = if (l.synced) TextAlign.Center else TextAlign.Start,

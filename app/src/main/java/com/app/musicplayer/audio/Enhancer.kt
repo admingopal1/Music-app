@@ -12,6 +12,10 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.tanh
 
+/** Converts malformed or out-of-range float PCM samples to safe normalized audio. */
+internal fun sanitizePcmSample(sample: Float): Float =
+    if (sample.isFinite()) sample.coerceIn(-1f, 1f) else 0f
+
 /** User-facing sound enhancer settings (stored in the "settings" preferences, keys enh_*). */
 data class EnhancerSettings(
     val clarity: Float = 0f,       // 0..1  treble detail
@@ -21,9 +25,18 @@ data class EnhancerSettings(
     val mono: Boolean = false,
     val limiter: Boolean = false,  // soft limiter to avoid clipping
 ) {
+    /** Keep persisted or externally edited preferences inside the stable DSP operating range. */
+    fun normalized() = copy(
+        clarity = if (clarity.isFinite()) clarity.coerceIn(0f, 1f) else 0f,
+        crossfeed = if (crossfeed.isFinite()) crossfeed.coerceIn(0f, 1f) else 0f,
+        width = if (width.isFinite()) width.coerceIn(0f, 2f) else 1f,
+        balance = if (balance.isFinite()) balance.coerceIn(-1f, 1f) else 0f,
+    )
+
     fun write(p: SharedPreferences) {
-        p.edit().putFloat("enh_clarity", clarity).putFloat("enh_crossfeed", crossfeed).putFloat("enh_width", width)
-            .putFloat("enh_balance", balance).putBoolean("enh_mono", mono).putBoolean("enh_limiter", limiter).apply()
+        val safe = normalized()
+        p.edit().putFloat("enh_clarity", safe.clarity).putFloat("enh_crossfeed", safe.crossfeed).putFloat("enh_width", safe.width)
+            .putFloat("enh_balance", safe.balance).putBoolean("enh_mono", safe.mono).putBoolean("enh_limiter", safe.limiter).apply()
     }
 
     companion object {
@@ -34,7 +47,7 @@ data class EnhancerSettings(
             balance = p.getFloat("enh_balance", 0f),
             mono = p.getBoolean("enh_mono", false),
             limiter = p.getBoolean("enh_limiter", false),
-        )
+        ).normalized()
     }
 }
 
@@ -108,8 +121,9 @@ override fun queueInput(inputBuffer: ByteBuffer) {
                 l = inputBuffer.getShort() / 32768f
                 r = inputBuffer.getShort() / 32768f
             } else {
-                l = inputBuffer.getFloat()
-                r = inputBuffer.getFloat()
+                // Float PCM can contain NaN / infinity from damaged decoders or malformed sources.
+                l = sanitizePcmSample(inputBuffer.getFloat())
+                r = sanitizePcmSample(inputBuffer.getFloat())
             }
             if (g > 0f) {                                  // clarity: lift everything above ~4 kHz
                 hiL += aHi * (l - hiL)
@@ -146,8 +160,8 @@ override fun queueInput(inputBuffer: ByteBuffer) {
                 out.putShort((l * 32768f).toInt().coerceIn(-32768, 32767).toShort())
                 out.putShort((r * 32768f).toInt().coerceIn(-32768, 32767).toShort())
             } else {
-                out.putFloat(l.coerceIn(-1f, 1f))
-                out.putFloat(r.coerceIn(-1f, 1f))
+                out.putFloat(sanitizePcmSample(l))
+                out.putFloat(sanitizePcmSample(r))
             }
         }
         while (inputBuffer.hasRemaining()) out.put(inputBuffer.get())

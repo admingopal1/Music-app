@@ -28,35 +28,45 @@ object ReplayGain {
 
     data class Settings(val mode: Int, val preampDb: Float, val fallbackDb: Float, val limit: Boolean)
 
-    fun readSettings(p: SharedPreferences) = Settings(
-        mode = p.getInt("rg_mode", MODE_OFF),
-        preampDb = p.getFloat("rg_preamp", 0f),
-        fallbackDb = p.getFloat("rg_fallback", 0f),
-        limit = p.getBoolean("rg_limit", true),
-    )
+    fun readSettings(p: SharedPreferences): Settings {
+        val mode = p.getInt("rg_mode", MODE_OFF)
+        val preamp = p.getFloat("rg_preamp", 0f)
+        val fallback = p.getFloat("rg_fallback", 0f)
+        return Settings(
+            mode = mode.takeIf { it in MODE_OFF..MODE_ALBUM } ?: MODE_OFF,
+            preampDb = if (preamp.isFinite()) preamp.coerceIn(-12f, 12f) else 0f,
+            fallbackDb = if (fallback.isFinite()) fallback.coerceIn(-24f, 12f) else 0f,
+            limit = p.getBoolean("rg_limit", true),
+        )
+    }
 
-    fun dbToLinear(db: Float): Float = 10.0.pow(db / 20.0).toFloat()
+    fun dbToLinear(db: Float): Float {
+        val safeDb = if (db.isFinite()) db.coerceIn(-24f, 24f) else 0f
+        return 10.0.pow(safeDb / 20.0).toFloat()
+    }
 
     /** The gain in dB that will be applied for this track, or null when ReplayGain is off. */
     fun appliedDb(info: RgInfo?, s: Settings): Float? {
-        if (s.mode == MODE_OFF) return null
+        if (s.mode !in MODE_TRACK..MODE_ALBUM) return null
         val gain: Float? = if (info == null) null
-        else if (s.mode == MODE_ALBUM) info.albumGain ?: info.trackGain
-        else info.trackGain ?: info.albumGain
+        else if (s.mode == MODE_ALBUM) info.albumGain?.takeIf { it.isFinite() } ?: info.trackGain?.takeIf { it.isFinite() }
+        else info.trackGain?.takeIf { it.isFinite() } ?: info.albumGain?.takeIf { it.isFinite() }
         val peak: Float? = if (info == null) null
-        else if (s.mode == MODE_ALBUM) info.albumPeak ?: info.trackPeak
-        else info.trackPeak ?: info.albumPeak
+        else if (s.mode == MODE_ALBUM) info.albumPeak?.takeIf { it.isFinite() && it > 0f } ?: info.trackPeak?.takeIf { it.isFinite() && it > 0f }
+        else info.trackPeak?.takeIf { it.isFinite() && it > 0f } ?: info.albumPeak?.takeIf { it.isFinite() && it > 0f }
 
-        var db = if (gain == null) s.fallbackDb else gain + s.preampDb
-        if (s.limit && peak != null && peak > 0f) {
-            val maxDb = -20f * log10(peak)       // gain at which the loudest sample just reaches full scale
-            db = min(db, maxDb)
+        val preamp = if (s.preampDb.isFinite()) s.preampDb.coerceIn(-12f, 12f) else 0f
+        val fallback = if (s.fallbackDb.isFinite()) s.fallbackDb.coerceIn(-24f, 12f) else 0f
+        var db = if (gain == null) fallback else gain.coerceIn(-24f, 24f) + preamp
+        if (s.limit && peak != null) {
+            val maxDb = -20f * log10(peak) // gain at which the loudest sample just reaches full scale
+            if (maxDb.isFinite()) db = min(db, maxDb)
         }
-        return db.coerceIn(-24f, 24f)
+        return (if (db.isFinite()) db else 0f).coerceIn(-24f, 24f)
     }
 
     private val NUM = Regex("[-+]?\\d+(?:[.,]\\d+)?")
-    private fun num(v: String?): Float? = v?.let { NUM.find(it)?.value?.replace(',', '.')?.toFloatOrNull() }
+    private fun num(v: String?): Float? = v?.let { NUM.find(it)?.value?.replace(',', '.')?.toFloatOrNull()?.takeIf { n -> n.isFinite() && n in -1000f..1000f } }
 
     /** [tags] keys must be lower-case. Handles ReplayGain 2 tags and Opus R128 tags. */
     fun fromTags(tags: Map<String, String>): RgInfo? {
@@ -103,8 +113,15 @@ class ReplayGainProcessor : BaseAudioProcessor() {
     private var channels = 2
     private var encoding = C.ENCODING_INVALID
 
-    fun setGainDb(db: Float) { rg = ReplayGain.dbToLinear(db); target = rg * fade }
-    fun setFade(f: Float) { fade = f.coerceIn(0f, 1f); target = rg * fade }
+    fun setGainDb(db: Float) {
+        val safeDb = if (db.isFinite()) db.coerceIn(-24f, 24f) else 0f
+        rg = ReplayGain.dbToLinear(safeDb)
+        target = rg * fade
+    }
+    fun setFade(f: Float) {
+        fade = if (f.isFinite()) f.coerceIn(0f, 1f) else 1f
+        target = rg * fade
+    }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         val enc = inputAudioFormat.encoding
@@ -159,7 +176,9 @@ override fun queueInput(inputBuffer: ByteBuffer) {
             while (inputBuffer.remaining() >= 4 * channels) {
                 if (current != t) current = if (current < t) min(t, current + step) else max(t, current - step)
                 for (c in 0 until channels) {
-                    out.putFloat((inputBuffer.getFloat() * current).coerceIn(-1f, 1f))
+                    // Float decoders can emit NaN / infinity; never propagate them to AudioTrack.
+                    val sample = sanitizePcmSample(inputBuffer.getFloat())
+                    out.putFloat(sanitizePcmSample(sample * current))
                 }
             }
         }
@@ -264,7 +283,8 @@ class FadeController(
     }
 
     private fun update() {
-        val secs = prefs.getFloat("fade_secs", 0f)
+        val storedSecs = prefs.getFloat("fade_secs", 0f)
+        val secs = if (storedSecs.isFinite()) storedSecs.coerceIn(0f, 12f) else 0f
         var f = 1f
         val d = player.duration
         if (secs > 0f && d != C.TIME_UNSET && d > 0L) {

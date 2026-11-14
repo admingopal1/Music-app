@@ -2,7 +2,7 @@ name: Build APK
 
 on:
   push:
-    branches: [ main, feature/vidmate-style-download-hub ]
+    branches: [ main, feature/vidmate-style-download-hub, upgrade/flagship-audio-lyrics-video ]
   pull_request:
   workflow_dispatch:
 
@@ -29,13 +29,24 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.9
+          gradle-version: 8.11.1
 
       - name: Run local unit tests
         run: gradle testDebugUnitTest --stacktrace
 
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
+
+      - name: Enforce 50 MB APK size limit
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          SIZE_BYTES="$(stat -c%s "$APK")"
+          SIZE_MB="$(awk "BEGIN { printf \"%.2f\", $SIZE_BYTES / 1048576 }")"
+          echo "APK size: ${SIZE_MB} MiB (limit: 50 MiB)"
+          if [ "$SIZE_BYTES" -gt $((50 * 1024 * 1024)) ]; then
+            echo "::error::APK exceeds the 50 MiB size limit"
+            exit 1
+          fi
 
       - name: Print APK signing certificate fingerprints
         run: |

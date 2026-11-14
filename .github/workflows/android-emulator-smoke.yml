@@ -2,12 +2,14 @@ name: Android emulator smoke test
 
 on:
   push:
+    branches: [ main, upgrade/flagship-audio-lyrics-video ]
+  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
-# Keep the newest main-branch emulator run; APK delivery is handled by build-apk.yml.
+# Keep the newest emulator run for each branch; APK delivery is handled by build-apk.yml.
 concurrency:
-  group: android-smoke-${{ github.ref }}
+  group: android-smoke-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -28,23 +30,58 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.9
+          gradle-version: 8.11.1
 
-      - name: Launch app on Android emulator
+      - name: Install and launch app on Android 16 emulator
         uses: ReactiveCircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 36
           target: google_apis
           arch: x86_64
           profile: pixel_2
           emulator-boot-timeout: 900
-          # Earlier failures happened during ADB animation-setting writes after boot.
-          # Keep emulator defaults to avoid those extra ADB settings calls.
-          disable-animations: false
+          # Avoid custom RAM/CPU overrides: hosted runners must retain headroom for the API 36 system image.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          disable-animations: true
           script: |
-            # The emulator-runner executes script lines in separate shells, so keep
-            # the test and diagnostics in one inner shell to preserve test_exit.
-            bash -c 'set +e; gradle connectedDebugAndroidTest --stacktrace --info; test_exit=$?; mkdir -p app/build/reports/android-emulator; adb logcat -d -v threadtime > app/build/reports/android-emulator/logcat.txt || true; adb shell dumpsys activity activities > app/build/reports/android-emulator/activities.txt || true; adb shell dumpsys package com.app.musicplayer > app/build/reports/android-emulator/package.txt || true; exit "$test_exit"'
+            set -euo pipefail
+            adb wait-for-device
+            for attempt in $(seq 1 90); do
+              boot_completed="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+              if [ "$boot_completed" = "1" ]; then
+                break
+              fi
+              sleep 2
+            done
+            test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+
+            adb shell settings put global window_animation_scale 0
+            adb shell settings put global transition_animation_scale 0
+            adb shell settings put global animator_duration_scale 0
+
+            gradle testDebugUnitTest installDebug --stacktrace
+
+            adb shell am force-stop com.app.musicplayer
+            adb shell monkey -p com.app.musicplayer -c android.intent.category.LAUNCHER 1
+            sleep 12
+
+            if ! adb shell pidof com.app.musicplayer >/dev/null 2>&1; then
+              adb logcat -d -v threadtime > app/build/reports/android-emulator-logcat.txt
+              echo "Music Player process did not remain alive after launcher start."
+              exit 1
+            fi
+
+            if ! adb shell dumpsys activity activities | grep -q 'com.app.musicplayer/.MainActivity'; then
+              adb logcat -d -v threadtime > app/build/reports/android-emulator-logcat.txt
+              adb shell dumpsys activity activities
+              echo "MainActivity was not resumed after launch."
+              exit 1
+            fi
+
+            mkdir -p app/build/reports/android-emulator
+            adb logcat -d -v threadtime > app/build/reports/android-emulator/logcat.txt
+            adb shell dumpsys activity activities > app/build/reports/android-emulator/activities.txt
+            adb shell dumpsys package com.app.musicplayer > app/build/reports/android-emulator/package.txt
 
       - name: Upload emulator test diagnostics
         if: always()
@@ -53,6 +90,5 @@ jobs:
           name: android-emulator-diagnostics
           path: |
             app/build/reports/android-emulator/
-            app/build/reports/androidTests/connected/
-            app/build/outputs/androidTest-results/connected/
+            app/build/reports/android-emulator-logcat.txt
           if-no-files-found: ignore

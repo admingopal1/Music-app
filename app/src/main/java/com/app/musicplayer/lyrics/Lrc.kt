@@ -1,6 +1,7 @@
 package com.app.musicplayer.lyrics
 
-data class LyricLine(val timeMs: Long, val text: String)
+data class LyricWord(val timeMs: Long, val text: String)
+data class LyricLine(val timeMs: Long, val text: String, val words: List<LyricWord> = emptyList())
 
 /** [synced] = lines carry timestamps (LRC). Otherwise the lines are plain text (unsynced lyrics). */
 data class Lyrics(val lines: List<LyricLine>, val synced: Boolean)
@@ -9,13 +10,12 @@ object Lrc {
     private val TIME = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
     private val OFFSET = Regex("""\[offset:\s*([+-]?\d+)]""", RegexOption.IGNORE_CASE)
     private val META = Regex("""^\[[A-Za-z#]+:.*]$""")
-    private val WORD_TAG = Regex("""<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>""")
+    private val WORD_TAG = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
 
     fun parse(raw: String): Lyrics? {
         val text = raw.removePrefix("\uFEFF")
         if (text.isBlank()) return null
         // Positive offsets delay lyrics; negative offsets advance them.
-        // Bound extreme metadata values to keep timestamp arithmetic safe.
         val offset = (OFFSET.find(text)?.groupValues?.get(1)?.toLongOrNull() ?: 0L)
             .coerceIn(-86_400_000L, 86_400_000L)
 
@@ -31,9 +31,17 @@ object Lrc {
                 val textOnly = TIME.replace(line, "").replace(WORD_TAG, "").trim()
                 if (textOnly.isNotEmpty() && !META.matches(line)) plain.add(LyricLine(-1L, textOnly))
             } else {
-                val content = TIME.replace(line.substring(stamps.last().range.last + 1), "")
-                    .replace(WORD_TAG, "").trim()
-                for (m in stamps) timed.add(LyricLine((toMs(m) + offset).coerceAtLeast(0L), content))
+                val lyricText = line.substring(stamps.last().range.last + 1)
+                val content = WORD_TAG.replace(lyricText, "").trim()
+                val words = WORD_TAG.findAll(lyricText).mapIndexed { index, match ->
+                    val start = match.range.last + 1
+                    val end = WORD_TAG.findAll(lyricText).drop(index + 1).firstOrNull()?.range?.first ?: lyricText.length
+                    val wordText = lyricText.substring(start, end)
+                    LyricWord((wordTime(match) + offset).coerceAtLeast(0L), wordText)
+                }.filter { it.text.isNotEmpty() }.toList()
+                for (m in stamps) timed.add(
+                    LyricLine((toMs(m) + offset).coerceAtLeast(0L), content, words)
+                )
             }
         }
         return when {
@@ -43,16 +51,29 @@ object Lrc {
         }
     }
 
+    private fun wordTime(m: MatchResult): Long {
+        val min = m.groupValues[1].toLongOrNull() ?: 0L
+        val sec = m.groupValues[2].toLongOrNull() ?: 0L
+        val fraction = m.groupValues[3]
+        val ms = when (fraction.length) {
+            0 -> 0L
+            1 -> fraction.toLong() * 100
+            2 -> fraction.toLong() * 10
+            else -> fraction.take(3).toLong()
+        }
+        return min * 60_000L + sec * 1000L + ms
+    }
+
     private fun toMs(m: MatchResult): Long {
         val min = m.groupValues[1].toLong()
         val sec = m.groupValues[2].toLong()
-        val fracStr = m.groupValues[3]
-        val frac = when (fracStr.length) {
+        val fraction = m.groupValues[3]
+        val ms = when (fraction.length) {
             0 -> 0L
-            1 -> fracStr.toLong() * 100
-            2 -> fracStr.toLong() * 10
-            else -> fracStr.take(3).toLong()
+            1 -> fraction.toLong() * 100
+            2 -> fraction.toLong() * 10
+            else -> fraction.take(3).toLong()
         }
-        return min * 60_000L + sec * 1000L + frac
+        return min * 60_000L + sec * 1000L + ms
     }
 }

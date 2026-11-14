@@ -1,6 +1,9 @@
 package com.app.musicplayer.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,11 +44,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.app.musicplayer.data.SmartMix
 import com.app.musicplayer.ui.PlayerViewModel
 
 @Composable
 fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
     val lists by vm.playlists.lists.collectAsStateWithLifecycle()
+    val songs by vm.songs.collectAsStateWithLifecycle()
+    val stats by vm.stats.stats.collectAsStateWithLifecycle()
+    var smartMixMessage by remember { mutableStateOf<String?>(null) }
     var showCreate by remember { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -55,10 +62,30 @@ fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
                 Text("Your Collections", style = MaterialTheme.typography.headlineMedium, color = Color.White, fontWeight = FontWeight.Bold)
                 Text("${lists.size} playlists · Your personal soundtrack", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.65f))
             }
+            FilledTonalButton(onClick = {
+                val ranked = SmartMix.rank(songs.map { it.id }, stats, limit = 30)
+                if (ranked.isEmpty()) {
+                    smartMixMessage = "Scan your music library first to build a Smart Mix."
+                } else {
+                    var name = "Smart Mix"
+                    var suffix = 2
+                    while (name in lists) { name = "Smart Mix $suffix"; suffix++ }
+                    vm.playlists.create(name)
+                    ranked.forEach { vm.playlists.addSong(name, it) }
+                    smartMixMessage = "$name created with ${ranked.size} songs, ranked from your favourites, ratings and listening history."
+                }
+            }, enabled = songs.isNotEmpty()) {
+                Text("Smart Mix")
+            }
             FilledTonalButton(onClick = { showCreate = true }) {
                 Icon(Icons.Rounded.Add, null)
                 Text("New")
             }
+        }
+
+        smartMixMessage?.let { message ->
+            Text(message, color = Color.White.copy(alpha = 0.78f), style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp))
         }
 
         if (lists.isEmpty()) {
@@ -85,7 +112,9 @@ fun PlaylistsScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
             items(lists.keys.toList(), key = { it }) { name ->
                 val ids = lists[name].orEmpty()
                 val isOpen = expanded == name
-                GlassCard(Modifier.fillMaxWidth()) {
+                GlassCard(Modifier.fillMaxWidth().animateContentSize(
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+                )) {
                     Row(
                         Modifier.fillMaxWidth().clickable { expanded = if (isOpen) null else name },
                         verticalAlignment = Alignment.CenterVertically,
