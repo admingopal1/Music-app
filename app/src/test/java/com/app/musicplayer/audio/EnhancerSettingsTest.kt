@@ -60,4 +60,18 @@ class EnhancerSettingsTest {
         assertFalse(settings.mono)
         assertFalse(settings.limiter)
     }
+    @Test
+    fun pcmSanitizerReplacesNonFiniteSamplesWithSilence() {
+        assertEquals(0f, sanitizePcmSample(Float.NaN), 0f)
+        assertEquals(0f, sanitizePcmSample(Float.POSITIVE_INFINITY), 0f)
+        assertEquals(0f, sanitizePcmSample(Float.NEGATIVE_INFINITY), 0f)
+    }
+
+    @Test
+    fun pcmSanitizerClampsSamplesToNormalizedFloatRange() {
+        assertEquals(1f, sanitizePcmSample(1.5f), 0f)
+        assertEquals(-1f, sanitizePcmSample(-1.5f), 0f)
+        assertEquals(0.25f, sanitizePcmSample(0.25f), 0f)
+    }
+
 }
