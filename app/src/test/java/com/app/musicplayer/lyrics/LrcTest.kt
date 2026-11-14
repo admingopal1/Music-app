@@ -42,6 +42,16 @@ class LrcTest {
         assertEquals(listOf("First  line", "Second line"), parsed.lines.map { it.text })
     }
 
+    @Test fun preservesMillisecondPrecisionForThreeDigitFractions() {
+        val parsed = Lrc.parse("[00:01.237]Precise")!!
+        assertEquals(1_237L, parsed.lines.single().timeMs)
+    }
+
+    @Test fun clampsExtremeOffsetsToOneDay() {
+        val parsed = Lrc.parse("[offset:+999999999]Bounded\\n[00:00.00]Line")!!
+        assertEquals(86_400_000L, parsed.lines.single().timeMs)
+    }
+
     @Test fun emptyOrMetadataOnlyLyricsReturnNull() {
         assertNull(Lrc.parse("  \n"))
         assertNull(Lrc.parse("[ar:Artist]\n[ti:Title]"))
