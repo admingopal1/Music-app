@@ -1,5 +1,8 @@
 package com.app.musicplayer.ui.screens
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -134,7 +137,8 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF2A2041).copy(alpha = 0.92f)),
             shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(20.dp)),
+            modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(20.dp))
+                .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)),
         ) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -159,11 +163,13 @@ fun AssistantScreen(vm: PlayerViewModel, onOpenPlayer: () -> Unit) {
         Card(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF302247).copy(alpha = 0.96f)),
             shape = RoundedCornerShape(22.dp),
-            modifier = Modifier.border(1.dp, Color(0xFFE3A7FF).copy(alpha = 0.16f), RoundedCornerShape(22.dp)),
+            modifier = Modifier.border(1.dp, Color(0xFFE3A7FF).copy(alpha = 0.16f), RoundedCornerShape(22.dp))
+                .animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("What should we play?", color = Color.White, fontWeight = FontWeight.Bold)
-                Text(answer, color = Color.White.copy(0.82f), style = MaterialTheme.typography.bodyMedium)
+                Text(answer, color = Color.White.copy(0.82f), style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.animateContentSize(animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)))
                 OutlinedTextField(
                     value = prompt, onValueChange = { prompt = it }, modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("e.g. Make a relaxing playlist") }, singleLine = false,
