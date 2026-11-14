@@ -12,6 +12,10 @@ import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.tanh
 
+/** Converts malformed or out-of-range float PCM samples to safe normalized audio. */
+internal fun sanitizePcmSample(sample: Float): Float =
+    if (sample.isFinite()) sample.coerceIn(-1f, 1f) else 0f
+
 /** User-facing sound enhancer settings (stored in the "settings" preferences, keys enh_*). */
 data class EnhancerSettings(
     val clarity: Float = 0f,       // 0..1  treble detail
@@ -117,8 +121,9 @@ override fun queueInput(inputBuffer: ByteBuffer) {
                 l = inputBuffer.getShort() / 32768f
                 r = inputBuffer.getShort() / 32768f
             } else {
-                l = inputBuffer.getFloat()
-                r = inputBuffer.getFloat()
+                // Float PCM can contain NaN / infinity from damaged decoders or malformed sources.
+                l = sanitizePcmSample(inputBuffer.getFloat())
+                r = sanitizePcmSample(inputBuffer.getFloat())
             }
             if (g > 0f) {                                  // clarity: lift everything above ~4 kHz
                 hiL += aHi * (l - hiL)
@@ -155,8 +160,8 @@ override fun queueInput(inputBuffer: ByteBuffer) {
                 out.putShort((l * 32768f).toInt().coerceIn(-32768, 32767).toShort())
                 out.putShort((r * 32768f).toInt().coerceIn(-32768, 32767).toShort())
             } else {
-                out.putFloat(l.coerceIn(-1f, 1f))
-                out.putFloat(r.coerceIn(-1f, 1f))
+                out.putFloat(sanitizePcmSample(l))
+                out.putFloat(sanitizePcmSample(r))
             }
         }
         while (inputBuffer.hasRemaining()) out.put(inputBuffer.get())
