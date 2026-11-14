@@ -36,6 +36,21 @@ class EnhancerSettingsTest {
     }
 
     @Test
+    fun normalizedReplacesNonFiniteValuesWithSafeNeutralDefaults() {
+        val safe = EnhancerSettings(
+            clarity = Float.NaN,
+            crossfeed = Float.POSITIVE_INFINITY,
+            width = Float.NEGATIVE_INFINITY,
+            balance = Float.NaN,
+        ).normalized()
+
+        assertEquals(0f, safe.clarity, 0f)
+        assertEquals(0f, safe.crossfeed, 0f)
+        assertEquals(1f, safe.width, 0f)
+        assertEquals(0f, safe.balance, 0f)
+    }
+
+    @Test
     fun defaultsAreNeutralAndDoNotEnableOptionalProcessing() {
         val settings = EnhancerSettings().normalized()
         assertEquals(0f, settings.clarity, 0f)

@@ -28,12 +28,17 @@ object ReplayGain {
 
     data class Settings(val mode: Int, val preampDb: Float, val fallbackDb: Float, val limit: Boolean)
 
-    fun readSettings(p: SharedPreferences) = Settings(
-        mode = p.getInt("rg_mode", MODE_OFF),
-        preampDb = p.getFloat("rg_preamp", 0f),
-        fallbackDb = p.getFloat("rg_fallback", 0f),
-        limit = p.getBoolean("rg_limit", true),
-    )
+    fun readSettings(p: SharedPreferences): Settings {
+        val mode = p.getInt("rg_mode", MODE_OFF)
+        val preamp = p.getFloat("rg_preamp", 0f)
+        val fallback = p.getFloat("rg_fallback", 0f)
+        return Settings(
+            mode = mode.takeIf { it in MODE_OFF..MODE_ALBUM } ?: MODE_OFF,
+            preampDb = if (preamp.isFinite()) preamp.coerceIn(-12f, 12f) else 0f,
+            fallbackDb = if (fallback.isFinite()) fallback.coerceIn(-24f, 12f) else 0f,
+            limit = p.getBoolean("rg_limit", true),
+        )
+    }
 
     fun dbToLinear(db: Float): Float = 10.0.pow(db / 20.0).toFloat()
 
@@ -103,8 +108,15 @@ class ReplayGainProcessor : BaseAudioProcessor() {
     private var channels = 2
     private var encoding = C.ENCODING_INVALID
 
-    fun setGainDb(db: Float) { rg = ReplayGain.dbToLinear(db); target = rg * fade }
-    fun setFade(f: Float) { fade = f.coerceIn(0f, 1f); target = rg * fade }
+    fun setGainDb(db: Float) {
+        val safeDb = if (db.isFinite()) db.coerceIn(-24f, 24f) else 0f
+        rg = ReplayGain.dbToLinear(safeDb)
+        target = rg * fade
+    }
+    fun setFade(f: Float) {
+        fade = if (f.isFinite()) f.coerceIn(0f, 1f) else 1f
+        target = rg * fade
+    }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         val enc = inputAudioFormat.encoding
@@ -264,7 +276,8 @@ class FadeController(
     }
 
     private fun update() {
-        val secs = prefs.getFloat("fade_secs", 0f)
+        val storedSecs = prefs.getFloat("fade_secs", 0f)
+        val secs = if (storedSecs.isFinite()) storedSecs.coerceIn(0f, 12f) else 0f
         var f = 1f
         val d = player.duration
         if (secs > 0f && d != C.TIME_UNSET && d > 0L) {

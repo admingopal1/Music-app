@@ -23,10 +23,10 @@ data class EnhancerSettings(
 ) {
     /** Keep persisted or externally edited preferences inside the stable DSP operating range. */
     fun normalized() = copy(
-        clarity = clarity.coerceIn(0f, 1f),
-        crossfeed = crossfeed.coerceIn(0f, 1f),
-        width = width.coerceIn(0f, 2f),
-        balance = balance.coerceIn(-1f, 1f),
+        clarity = if (clarity.isFinite()) clarity.coerceIn(0f, 1f) else 0f,
+        crossfeed = if (crossfeed.isFinite()) crossfeed.coerceIn(0f, 1f) else 0f,
+        width = if (width.isFinite()) width.coerceIn(0f, 2f) else 1f,
+        balance = if (balance.isFinite()) balance.coerceIn(-1f, 1f) else 0f,
     )
 
     fun write(p: SharedPreferences) {

@@ -457,7 +457,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 0 = off. Read by the playback service. */
     fun setFadeSecs(secs: Float) {
-        val v = secs.coerceIn(0f, 12f)
+        val v = if (secs.isFinite()) secs.coerceIn(0f, 12f) else 0f
         prefs.edit().putFloat("fade_secs", v).apply()
         _fadeSecs.value = v
     }
@@ -492,10 +492,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ReplayGain settings are read by the playback service (same preferences file).
     fun setRgMode(mode: Int) { prefs.edit().putInt("rg_mode", mode).apply(); _rgMode.value = mode }
     fun setRgPreamp(db: Float) {
-        val v = db.coerceIn(-12f, 12f); prefs.edit().putFloat("rg_preamp", v).apply(); _rgPreamp.value = v
+        val v = if (db.isFinite()) db.coerceIn(-12f, 12f) else 0f; prefs.edit().putFloat("rg_preamp", v).apply(); _rgPreamp.value = v
     }
     fun setRgFallback(db: Float) {
-        val v = db.coerceIn(-24f, 12f); prefs.edit().putFloat("rg_fallback", v).apply(); _rgFallback.value = v
+        val v = if (db.isFinite()) db.coerceIn(-24f, 12f) else 0f; prefs.edit().putFloat("rg_fallback", v).apply(); _rgFallback.value = v
     }
     fun setRgLimit(on: Boolean) { prefs.edit().putBoolean("rg_limit", on).apply(); _rgLimit.value = on }
 
