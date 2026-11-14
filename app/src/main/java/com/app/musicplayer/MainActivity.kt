@@ -24,15 +24,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.VideoLibrary
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -106,43 +101,28 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     }
     LaunchedEffect(Unit) { launcher.launch(permissions) }
 
-    // Keep the four most-used destinations visible. Less-frequent tools live
-    // in More, avoiding eight compressed and hard-to-hit bottom-nav targets.
+    // Keep only the three requested destinations: Music, Videos, and Share.
+    // PlayerScreen remains accessible from the mini-player and track actions.
     val primaryTabs = remember {
         listOf(
-            Tab("Library", Icons.Rounded.LibraryMusic, 1),
+            Tab("Music", Icons.Rounded.LibraryMusic, 1),
             Tab("Videos", Icons.Rounded.VideoLibrary, 5),
-            Tab("Playlists", Icons.AutoMirrored.Rounded.QueueMusic, 4),
-        )
-    }
-    val moreTabs = remember {
-        listOf(
-            Tab("Player", Icons.Rounded.PlayCircle, 2),
-            Tab("Equalizer", Icons.Rounded.GraphicEq, 3),
-            Tab("AI Assistant", Icons.Rounded.AutoAwesome, 6),
             Tab("Share", Icons.Rounded.Share, 7),
         )
     }
     var tab by rememberSaveable { mutableIntStateOf(1) }
-    var showMore by remember { mutableStateOf(false) }
     // A plain List<Int> is Bundle-safe; mutableStateListOf is not and can crash when screen state is saved.
     var tabHistory by rememberSaveable { mutableStateOf<List<Int>>(emptyList()) }
 
     fun openTab(destination: Int) {
         if (destination == tab) {
-            showMore = false
             return
         }
         tabHistory = (tabHistory + tab).takeLast(20)
         tab = destination
-        showMore = false
     }
 
-    BackHandler(enabled = showMore || tabHistory.isNotEmpty()) {
-        if (showMore) {
-            showMore = false
-            return@BackHandler
-        }
+    BackHandler(enabled = tabHistory.isNotEmpty()) {
         tab = tabHistory.lastOrNull() ?: 1
         tabHistory = tabHistory.dropLast(1)
     }
@@ -171,22 +151,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                                 )
                             }
                             NavigationBarItem(
-                                selected = tab in moreTabs.map { it.destination },
-                                onClick = { showMore = true },
-                                icon = { Icon(Icons.Rounded.MoreHoriz, contentDescription = "More") },
-                                label = { Text("More", maxLines = 1, style = MaterialTheme.typography.labelSmall) },
-                                colors = navColors(),
-                            )
-                        }
-                        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
-                            moreTabs.forEach { item ->
-                                DropdownMenuItem(
-                                    text = { Text(item.label) },
-                                    leadingIcon = { Icon(item.icon, contentDescription = null) },
-                                    onClick = { openTab(item.destination) },
-                                )
-                            }
-                        }
+                                
                     }
                 }
             },
