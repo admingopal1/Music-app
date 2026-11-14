@@ -26,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PlayCircle
@@ -59,7 +58,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.app.musicplayer.ui.PlayerViewModel
 import com.app.musicplayer.ui.screens.AssistantScreen
 import com.app.musicplayer.ui.screens.EqualizerScreen
-import com.app.musicplayer.ui.screens.HomeScreen
 import com.app.musicplayer.ui.screens.LibraryScreen
 import com.app.musicplayer.ui.screens.MiniPlayer
 import com.app.musicplayer.ui.screens.PlayerScreen
@@ -112,7 +110,6 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     // in More, avoiding eight compressed and hard-to-hit bottom-nav targets.
     val primaryTabs = remember {
         listOf(
-            Tab("Home", Icons.Rounded.Home, 0),
             Tab("Library", Icons.Rounded.LibraryMusic, 1),
             Tab("Videos", Icons.Rounded.VideoLibrary, 5),
             Tab("Playlists", Icons.AutoMirrored.Rounded.QueueMusic, 4),
@@ -126,7 +123,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             Tab("Share", Icons.Rounded.Share, 7),
         )
     }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tab by rememberSaveable { mutableIntStateOf(1) }
     var showMore by remember { mutableStateOf(false) }
     // A plain List<Int> is Bundle-safe; mutableStateListOf is not and can crash when screen state is saved.
     var tabHistory by rememberSaveable { mutableStateOf<List<Int>>(emptyList()) }
@@ -146,7 +143,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             showMore = false
             return@BackHandler
         }
-        tab = tabHistory.lastOrNull() ?: 0
+        tab = tabHistory.lastOrNull() ?: 1
         tabHistory = tabHistory.dropLast(1)
     }
 
@@ -205,14 +202,14 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                     label = "tabs",
                 ) { t ->
                     when (t) {
-                        0 -> HomeScreen(vm, onOpenPlayer = { openTab(2) }, onOpenLibrary = { openTab(1) }, onOpenVideos = { openTab(5) })
                         1 -> LibraryScreen(vm, onOpenPlayer = { openTab(2) })
                         2 -> PlayerScreen(vm)
                         3 -> EqualizerScreen(vm.fx)
                         4 -> PlaylistsScreen(vm, onOpenPlayer = { openTab(2) })
                         5 -> VideosScreen(vm)
                         6 -> AssistantScreen(vm, onOpenPlayer = { openTab(2) })
-                        else -> ShareScreen(vm)
+                        7 -> ShareScreen(vm)
+                        else -> LibraryScreen(vm, onOpenPlayer = { openTab(2) })
                     }
                 }
             }
