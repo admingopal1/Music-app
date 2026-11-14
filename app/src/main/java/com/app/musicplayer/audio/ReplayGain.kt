@@ -176,7 +176,9 @@ override fun queueInput(inputBuffer: ByteBuffer) {
             while (inputBuffer.remaining() >= 4 * channels) {
                 if (current != t) current = if (current < t) min(t, current + step) else max(t, current - step)
                 for (c in 0 until channels) {
-                    out.putFloat((inputBuffer.getFloat() * current).coerceIn(-1f, 1f))
+                    // Float decoders can emit NaN / infinity; never propagate them to AudioTrack.
+                    val sample = sanitizePcmSample(inputBuffer.getFloat())
+                    out.putFloat(sanitizePcmSample(sample * current))
                 }
             }
         }
