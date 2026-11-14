@@ -31,10 +31,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -48,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,6 +64,14 @@ private val REVERB_NAMES = listOf("Off", "Small room", "Medium room", "Large roo
 @Composable
 fun EqualizerScreen(fx: SonyAudioEffects) {
     val s by fx.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val prefs = remember(context) { context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE) }
+    var clarity by rememberSaveable { mutableStateOf(prefs.getFloat("enh_clarity", 0f)) }
+    var crossfeed by rememberSaveable { mutableStateOf(prefs.getFloat("enh_crossfeed", 0f)) }
+    var width by rememberSaveable { mutableStateOf(prefs.getFloat("enh_width", 1f)) }
+    var balance by rememberSaveable { mutableStateOf(prefs.getFloat("enh_balance", 0f)) }
+    var mono by rememberSaveable { mutableStateOf(prefs.getBoolean("enh_mono", false)) }
+    var limiter by rememberSaveable { mutableStateOf(prefs.getBoolean("enh_limiter", false)) }
     var profileName by rememberSaveable { mutableStateOf("") }
     val on = s.enabled && s.available
 
@@ -136,6 +147,33 @@ fun EqualizerScreen(fx: SonyAudioEffects) {
             )
         }
 
+        // Software DSP controls are applied live by the service-side EnhancerController.
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Advanced DSP Studio", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text("Live stereo processing · 16-bit / float PCM", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                DspSlider("Clarity", clarity, 0f..1f, { clarity = it; prefs.edit().putFloat("enh_clarity", it).apply() }, "\${(clarity * 100).roundToInt()}%")
+                DspSlider("Headphone crossfeed", crossfeed, 0f..1f, { crossfeed = it; prefs.edit().putFloat("enh_crossfeed", it).apply() }, "\${(crossfeed * 100).roundToInt()}%")
+                DspSlider("Stereo width", width, 0f..2f, { width = it; prefs.edit().putFloat("enh_width", it).apply() }, "\${(width * 100).roundToInt()}%")
+                DspSlider("Left / right balance", balance, -1f..1f, { balance = it; prefs.edit().putFloat("enh_balance", it).apply() }, when { balance < -0.01f -> "L \${(kotlin.math.abs(balance) * 100).roundToInt()}%"; balance > 0.01f -> "R \${(balance * 100).roundToInt()}%"; else -> "Center" })
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Mono compatibility", style = MaterialTheme.typography.titleSmall)
+                        Text("Blend left and right channels", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = mono, onCheckedChange = { mono = it; prefs.edit().putBoolean("enh_mono", it).apply() })
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Soft limiter", style = MaterialTheme.typography.titleSmall)
+                        Text("Reduce peaks when DSP boosts the signal", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = limiter, onCheckedChange = { limiter = it; prefs.edit().putBoolean("enh_limiter", it).apply() })
+                }
+                Text("Tip: keep stereo width near 100% for accurate imaging. Strong clarity or width boosts can change the original mix.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
         // Reverb
         Text("Reverb", style = MaterialTheme.typography.titleMedium)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -168,6 +206,23 @@ private fun freqLabel(hz: Int): String =
 
 private fun yToDb(y: Float, height: Float, min: Float, max: Float): Float =
     max - (y / height).coerceIn(0f, 1f) * (max - min)
+
+@Composable
+private fun DspSlider(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onValue: (Float) -> Unit,
+    valueLabel: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text(valueLabel, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(value = value.coerceIn(range), onValueChange = onValue, valueRange = range)
+    }
+}
 
 /** Vertical slider drawn on a Canvas: drag or tap anywhere on the track. */
 @Composable
