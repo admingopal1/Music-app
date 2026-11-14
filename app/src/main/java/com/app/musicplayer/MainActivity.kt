@@ -19,14 +19,14 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -95,30 +95,29 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     val amoled by vm.amoled.collectAsStateWithLifecycle()
 
     val permissions = rememberPermissions()
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
         vm.loadLibrary()
         vm.loadVideos()
     }
     LaunchedEffect(Unit) { launcher.launch(permissions) }
 
-    // Focused navigation: Music, Videos, Equalizer, and Share.
-    // Full PlayerScreen remains accessible from the mini-player and track actions.
+    // Keep the focused Music, Videos, EQ and Share navigation.
+    // Full player, playlists and assistant remain reachable from existing app entry points.
     val primaryTabs = remember {
         listOf(
             Tab("Music", Icons.Rounded.LibraryMusic, 1),
             Tab("Videos", Icons.Rounded.VideoLibrary, 5),
-            Tab("EQ", Icons.Rounded.GraphicEq, 3),
+            Tab("EQ", Icons.Rounded.Tune, 3),
             Tab("Share", Icons.Rounded.Share, 7),
         )
     }
     var tab by rememberSaveable { mutableIntStateOf(1) }
-    // A plain List<Int> is Bundle-safe; mutableStateListOf is not and can crash when screen state is saved.
     var tabHistory by rememberSaveable { mutableStateOf<List<Int>>(emptyList()) }
 
     fun openTab(destination: Int) {
-        if (destination == tab) {
-            return
-        }
+        if (destination == tab) return
         tabHistory = (tabHistory + tab).takeLast(20)
         tab = destination
     }
@@ -134,40 +133,50 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             bottomBar = {
                 Column {
                     if (tab != 2) MiniPlayer(vm) { openTab(2) }
-                    Box {
-                        NavigationBar(
-                            containerColor = Color(0xFF171329).copy(alpha = 0.98f),
-                            tonalElevation = 10.dp,
-                            // Reserve the Android system navigation area so app
-                            // targets cannot overlap the device Back/gesture region.
-                            windowInsets = androidx.compose.foundation.layout.WindowInsets.navigationBars,
-                        ) {
-                            primaryTabs.forEach { item ->
-                                NavigationBarItem(
-                                    selected = tab == item.destination,
-                                    onClick = { openTab(item.destination) },
-                                    icon = { Icon(item.icon, contentDescription = item.label) },
-                                    label = { Text(item.label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
-                                    colors = navColors(),
-                                )
-                            }
+                    NavigationBar(
+                        containerColor = Color(0xFF171329).copy(alpha = 0.98f),
+                        tonalElevation = 10.dp,
+                        windowInsets = WindowInsets.navigationBars,
+                    ) {
+                        primaryTabs.forEach { item ->
                             NavigationBarItem(
-                                
+                                selected = tab == item.destination,
+                                onClick = { openTab(item.destination) },
+                                icon = { Icon(item.icon, contentDescription = item.label) },
+                                label = {
+                                    Text(
+                                        item.label,
+                                        maxLines = 1,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                },
+                                colors = navColors(),
+                            )
+                        }
                     }
                 }
             },
         ) { inner ->
             Box(
-                Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(listOf(Color(0xFF21133E), Color(0xFF17152F), Color(0xFF080810)))
-                ).padding(inner)
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0xFF21133E),
+                                Color(0xFF17152F),
+                                Color(0xFF080810),
+                            )
+                        )
+                    )
+                    .padding(inner)
             ) {
                 AnimatedContent(
                     targetState = tab,
                     transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(140)) },
                     label = "tabs",
-                ) { t ->
-                    when (t) {
+                ) { destination ->
+                    when (destination) {
                         1 -> LibraryScreen(vm, onOpenPlayer = { openTab(2) })
                         2 -> PlayerScreen(vm)
                         3 -> EqualizerScreen(vm.fx)
@@ -194,11 +203,13 @@ private fun navColors() = NavigationBarItemDefaults.colors(
 
 @Composable
 private fun rememberPermissions(): Array<String> = remember {
-    if (Build.VERSION.SDK_INT >= 33)
+    if (Build.VERSION.SDK_INT >= 33) {
         arrayOf(
             Manifest.permission.READ_MEDIA_AUDIO,
             Manifest.permission.READ_MEDIA_VIDEO,
             Manifest.permission.POST_NOTIFICATIONS,
         )
-    else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+    } else {
+        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
 }
