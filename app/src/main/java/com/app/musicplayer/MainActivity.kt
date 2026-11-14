@@ -101,12 +101,13 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     }
     LaunchedEffect(Unit) { launcher.launch(permissions) }
 
-    // Keep only the three requested destinations: Music, Videos, and Share.
-    // PlayerScreen remains accessible from the mini-player and track actions.
+    // Focused navigation: Music, Videos, Equalizer, and Share.
+    // Full PlayerScreen remains accessible from the mini-player and track actions.
     val primaryTabs = remember {
         listOf(
             Tab("Music", Icons.Rounded.LibraryMusic, 1),
             Tab("Videos", Icons.Rounded.VideoLibrary, 5),
+            Tab("EQ", Icons.Rounded.GraphicEq, 3),
             Tab("Share", Icons.Rounded.Share, 7),
         )
     }
