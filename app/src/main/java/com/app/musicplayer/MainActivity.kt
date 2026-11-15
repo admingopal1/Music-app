@@ -21,13 +21,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.VideoLibrary
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -101,8 +104,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
     }
     LaunchedEffect(Unit) { launcher.launch(permissions) }
 
-    // Focused navigation: Music, Videos, Equalizer, and Share.
-    // Full PlayerScreen remains accessible from the mini-player and track actions.
+    // Keep four frequently used destinations visible; less-used screens stay in More.
     val primaryTabs = remember {
         listOf(
             Tab("Music", Icons.Rounded.LibraryMusic, 1),
@@ -111,19 +113,33 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
             Tab("Share", Icons.Rounded.Share, 7),
         )
     }
+    val moreTabs = remember {
+        listOf(
+            Tab("Player", Icons.Rounded.PlayCircle, 2),
+            Tab("Playlists", Icons.AutoMirrored.Rounded.QueueMusic, 4),
+            Tab("AI Assistant", Icons.Rounded.AutoAwesome, 6),
+        )
+    }
     var tab by rememberSaveable { mutableIntStateOf(1) }
-    // A plain List<Int> is Bundle-safe; mutableStateListOf is not and can crash when screen state is saved.
+    var showMore by remember { mutableStateOf(false) }
+    // A plain List<Int> is Bundle-safe; mutableStateListOf is not and can crash when state is saved.
     var tabHistory by rememberSaveable { mutableStateOf<List<Int>>(emptyList()) }
 
     fun openTab(destination: Int) {
         if (destination == tab) {
+            showMore = false
             return
         }
         tabHistory = (tabHistory + tab).takeLast(20)
         tab = destination
+        showMore = false
     }
 
-    BackHandler(enabled = tabHistory.isNotEmpty()) {
+    BackHandler(enabled = showMore || tabHistory.isNotEmpty()) {
+        if (showMore) {
+            showMore = false
+            return@BackHandler
+        }
         tab = tabHistory.lastOrNull() ?: 1
         tabHistory = tabHistory.dropLast(1)
     }
@@ -138,8 +154,7 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                         NavigationBar(
                             containerColor = Color(0xFF171329).copy(alpha = 0.98f),
                             tonalElevation = 10.dp,
-                            // Reserve the Android system navigation area so app
-                            // targets cannot overlap the device Back/gesture region.
+                            // Keep app targets clear of the Android system Back/gesture area.
                             windowInsets = androidx.compose.foundation.layout.WindowInsets.navigationBars,
                         ) {
                             primaryTabs.forEach { item ->
@@ -152,7 +167,22 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                                 )
                             }
                             NavigationBarItem(
-                                
+                                selected = tab in moreTabs.map { it.destination },
+                                onClick = { showMore = true },
+                                icon = { Icon(Icons.Rounded.MoreHoriz, contentDescription = "More") },
+                                label = { Text("More", maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                                colors = navColors(),
+                            )
+                        }
+                        DropdownMenu(expanded = showMore, onDismissRequest = { showMore = false }) {
+                            moreTabs.forEach { item ->
+                                DropdownMenuItem(
+                                    text = { Text(item.label) },
+                                    leadingIcon = { Icon(item.icon, contentDescription = null) },
+                                    onClick = { openTab(item.destination) },
+                                )
+                            }
+                        }
                     }
                 }
             },
@@ -166,8 +196,8 @@ private fun AppRoot(vm: PlayerViewModel = viewModel()) {
                     targetState = tab,
                     transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(140)) },
                     label = "tabs",
-                ) { t ->
-                    when (t) {
+                ) { destination ->
+                    when (destination) {
                         1 -> LibraryScreen(vm, onOpenPlayer = { openTab(2) })
                         2 -> PlayerScreen(vm)
                         3 -> EqualizerScreen(vm.fx)
