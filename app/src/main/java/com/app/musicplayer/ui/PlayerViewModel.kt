@@ -263,7 +263,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             repeatMode = c.repeatMode,
             speed = c.playbackParameters.speed,
             pitch = c.playbackParameters.pitch,
-            playbackError = _ui.value.playbackError,
+            // Clear a previous stream/DSP error once the active player reaches READY.
+            // This is especially important after MusicService rebuilds the player with
+            // Media3's stock audio sink and playback successfully recovers.
+            playbackError = if (c.playbackState == Player.STATE_READY) null else _ui.value.playbackError,
         )
         if (song?.id != artFor) {
             artFor = song?.id
