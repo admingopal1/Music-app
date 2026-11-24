@@ -32,13 +32,16 @@ jobs:
 
       - name: Launch app on Android emulator
         uses: ReactiveCircus/android-emulator-runner@v2
+        env:
+          # The current hosted runner lacks hardware acceleration. Android Emulator 37
+          # requires this opt-in before it will allow the runner's -accel off fallback.
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel_2
           emulator-boot-timeout: 900
-          # Keep emulator defaults; readiness and diagnostics run in a checked-in Bash script.
           disable-animations: false
           # The runner executes script input as individual shell commands; invoke one Bash file.
           script: bash .github/scripts/run-emulator-smoke.sh
