@@ -28,4 +28,12 @@ class PendingPlaybackQueueTest {
         queue.enqueue(2)
         assertEquals(listOf(2), queue.drain())
     }
+
+    @Test fun nextAndPreviousCommandsRemainQueuedUntilConnection() {
+        val queue = PendingPlaybackQueue<String>()
+        queue.enqueue("replace")
+        queue.enqueue("next")
+        queue.enqueue("previous")
+        assertEquals(listOf("replace", "next", "previous"), queue.drain())
+    }
 }
