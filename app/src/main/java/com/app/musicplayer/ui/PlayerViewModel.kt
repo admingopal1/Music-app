@@ -153,6 +153,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         data class AddToQueue(val song: Song) : PendingPlaybackAction
         data class PlayUrl(val url: String) : PendingPlaybackAction
         data object TogglePlayback : PendingPlaybackAction
+        data object Next : PendingPlaybackAction
+        data object Previous : PendingPlaybackAction
     }
 
     // Retain queue requests until the MediaSession controller is connected.
@@ -243,6 +245,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                         is PendingPlaybackAction.AddToQueue -> addToQueue(action.song)
                         is PendingPlaybackAction.PlayUrl -> playUrl(action.url)
                         PendingPlaybackAction.TogglePlayback -> togglePlay()
+                        PendingPlaybackAction.Next -> next()
+                        PendingPlaybackAction.Previous -> previous()
                     }
                 }
             }
@@ -412,8 +416,23 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun next() { controller?.seekToNext() }
-    fun previous() { controller?.seekToPrevious() }
+    fun next() {
+        val c = controller
+        if (c == null) {
+            pendingPlayback.enqueue(PendingPlaybackAction.Next)
+            return
+        }
+        c.seekToNext()
+    }
+
+    fun previous() {
+        val c = controller
+        if (c == null) {
+            pendingPlayback.enqueue(PendingPlaybackAction.Previous)
+            return
+        }
+        c.seekToPrevious()
+    }
 
     fun seekTo(ms: Long) {
         controller?.seekTo(ms)
